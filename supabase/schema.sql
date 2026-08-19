@@ -8,6 +8,8 @@ create table if not exists public.sesiones_demo (
   filtro text,
   con_imagen boolean default false,
   imagen_base64 text,                 -- null si el usuario no dio consentimiento de imagen
+  con_landmarks boolean default false,
+  landmarks_faciales jsonb,           -- 68 puntos {x,y} del rostro; null si no hubo consentimiento
   navegador text,
   idioma text,
   zona_horaria text,
@@ -33,3 +35,9 @@ create policy "insertar_desde_demo"
 
 -- Sugerido: borra los datos de la demo cuando termine el curso.
 -- delete from public.sesiones_demo where creado_en < now() - interval '30 days';
+
+-- Nota: landmarks_faciales guarda coordenadas de geometría facial, que
+-- son datos biométricos. Es justamente el punto de la demo (mostrar que
+-- esto se puede recolectar), pero por eso el frontend lo pide con un
+-- consentimiento separado del resto -- trátalo con el mismo cuidado que
+-- le pedirías a cualquier sitio real: no lo compartas ni lo dejes público.

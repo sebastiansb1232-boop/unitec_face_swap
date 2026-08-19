@@ -1,3 +1,5 @@
 node_modules/
 .env
 .DS_Store
+# config.js se genera en cada build a partir de .env / variables de Render
+public/config.js

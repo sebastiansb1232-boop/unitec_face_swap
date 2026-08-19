@@ -1,8 +1,7 @@
-// Reemplaza estos valores con los de tu proyecto de Supabase
-// (Project Settings -> API en supabase.com). La "anon key" es pública
-// por diseño en apps cliente, pero SIEMPRE debe ir protegida por
-// Row Level Security (ver supabase/schema.sql).
+// Archivo GENERADO por scripts/generate-config.js — no lo edites a mano.
+// Si ves este mensaje, todavía no se ha ejecutado el build con tus
+// variables de entorno (ver README, sección ".env y variables de entorno").
 window.SUPABASE_CONFIG = {
-  url: "https://TU-PROYECTO.supabase.co",
-  anonKey: "TU-ANON-KEY-PUBLICA",
+  url: "",
+  anonKey: "",
 };

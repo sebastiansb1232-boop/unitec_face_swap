@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0c09" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>PANÓPTICO // Filtros con cámara — UNITEC</title>
 <meta name="description" content="Demo educativa de UNITEC sobre los riesgos de dar acceso a tu cámara en la web." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,6 +16,12 @@
 </head>
 <body>
 
+<div class="ambient" aria-hidden="true">
+  <span class="blob blob-a"></span>
+  <span class="blob blob-b"></span>
+  <span class="blob blob-c"></span>
+  <span class="noise"></span>
+</div>
 <div class="scanlines" aria-hidden="true"></div>
 
 <header class="topbar">
@@ -97,7 +107,13 @@
         <span>Adicionalmente, acepto guardar <strong>una captura de imagen</strong> con el filtro aplicado en la base de datos del proyecto. <em>(opcional — nota cómo este permiso es distinto al de arriba)</em></span>
       </label>
 
+      <label class="check-row optional">
+        <input type="checkbox" id="consent-landmarks">
+        <span>Adicionalmente, acepto que se lean y guarden <strong>los puntos de mi rostro</strong> (posición de ojos, cejas, nariz y boca) que usa el filtro para seguir mi cara. <em>(opcional — esto es un dato biométrico, distinto a guardar una foto)</em></span>
+      </label>
+
       <button id="start-camera" class="btn btn-primary btn-wide" disabled>Activar cámara</button>
+      <p class="consent-note">Funciona en la cámara de tu compu o en la cámara frontal/trasera de tu celular — el navegador te va a preguntar cuál usar.</p>
       <p class="consent-hint" id="consent-hint">Marca al menos las dos primeras casillas para continuar.</p>
     </div>
   </section>
@@ -119,6 +135,7 @@
       </div>
       <div class="studio-actions">
         <button id="capture-btn" class="btn btn-primary">Capturar y registrar</button>
+        <button id="switch-camera-btn" class="btn btn-ghost">↺ Cambiar cámara</button>
         <button id="stop-btn" class="btn btn-ghost">Apagar cámara</button>
       </div>
       <p class="studio-status" id="studio-status"></p>
@@ -134,6 +151,8 @@
         <div><dt>Resolución de pantalla</dt><dd id="hud-screen">—</dd></div>
         <div><dt>ID de sesión (anónimo)</dt><dd id="hud-session">—</dd></div>
         <div><dt>Filtro activo</dt><dd id="hud-filter">ninguno</dd></div>
+        <div><dt>Rostro detectado</dt><dd id="hud-face">no</dd></div>
+        <div><dt>Puntos faciales leídos</dt><dd id="hud-landmarks">0</dd></div>
         <div><dt>Capturas guardadas</dt><dd id="hud-count">0</dd></div>
       </dl>
       <p class="hud-note">Todo esto se calcula en tu navegador. Un sitio malicioso real podría enviarlo a un servidor sin mostrarte nada de esto.</p>

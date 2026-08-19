@@ -1,13 +1,24 @@
-# Opción recomendada: Static Site (no necesita server.js ni build).
-# En Render: New + -> Static Site -> conecta tu repo -> Publish directory: public
+# Despliegue como Static Site (recomendado: gratis, HTTPS automático,
+# funciona igual en PC y Android porque es la misma web responsive).
+#
+# En Render: New + -> Blueprint -> conecta tu repo -> Apply.
+# Luego ve a la pestaña "Environment" del servicio y completa:
+#   SUPABASE_URL
+#   SUPABASE_ANON_KEY
+# (los valores están vacíos aquí a propósito: nunca pongas claves reales
+# en este archivo si el repo es público).
 
 services:
   - type: web
     name: unitec-panoptico-demo
     env: static
-    buildCommand: ""
+    buildCommand: "npm install && npm run build"
     staticPublishPath: public
-    envVars: []
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
     routes:
       - type: rewrite
         source: /*
@@ -17,5 +28,10 @@ services:
 #  - type: web
 #    name: unitec-panoptico-demo-server
 #    env: node
-#    buildCommand: npm install
+#    buildCommand: npm install && npm run build
 #    startCommand: npm start
+#    envVars:
+#      - key: SUPABASE_URL
+#        sync: false
+#      - key: SUPABASE_ANON_KEY
+#        sync: false
