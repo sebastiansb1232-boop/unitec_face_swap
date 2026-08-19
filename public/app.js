@@ -84,23 +84,43 @@ let captureCount = 0;
 let faceModelReady = false;
 let facingMode = "user"; // 'user' = frontal, 'environment' = trasera (Android/iOS)
 let lastDetection = null; // { box, points, rawPoints }
+const hudModel = $("#hud-model");
+
+// Dos espejos por si uno falla o está lento — se prueban en orden.
+const MODEL_URLS = [
+  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model",
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
+];
 
 async function loadFaceModel() {
-  try {
-    if (!window.faceapi) return false;
-    const MODEL_URL =
-      "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-    ]);
-    faceModelReady = true;
-    return true;
-  } catch (err) {
-    console.warn("No se pudo cargar el modelo de detección facial:", err);
+  if (!window.faceapi) {
+    console.error(
+      "[face-api] La librería no se cargó (revisa el <script> de face-api.js en index.html o tu conexión)."
+    );
+    if (hudModel) hudModel.textContent = "librería no disponible";
     faceModelReady = false;
     return false;
   }
+
+  for (const MODEL_URL of MODEL_URLS) {
+    try {
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+      ]);
+      faceModelReady = true;
+      if (hudModel) hudModel.textContent = "listo";
+      console.log(`[face-api] Modelo cargado desde ${MODEL_URL}`);
+      return true;
+    } catch (err) {
+      console.warn(`[face-api] Falló cargando desde ${MODEL_URL}:`, err);
+    }
+  }
+
+  faceModelReady = false;
+  if (hudModel) hudModel.textContent = "no disponible (revisa tu conexión)";
+  console.error("[face-api] No se pudo cargar el modelo desde ningún CDN.");
+  return false;
 }
 loadFaceModel();
 
