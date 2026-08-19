@@ -1,0 +1,21 @@
+# Opción recomendada: Static Site (no necesita server.js ni build).
+# En Render: New + -> Static Site -> conecta tu repo -> Publish directory: public
+
+services:
+  - type: web
+    name: unitec-panoptico-demo
+    env: static
+    buildCommand: ""
+    staticPublishPath: public
+    envVars: []
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+# Alternativa (Web Service con Express), si prefieres ese modo:
+#  - type: web
+#    name: unitec-panoptico-demo-server
+#    env: node
+#    buildCommand: npm install
+#    startCommand: npm start

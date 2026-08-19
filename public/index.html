@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PANÓPTICO // Filtros con cámara — UNITEC</title>
+<meta name="description" content="Demo educativa de UNITEC sobre los riesgos de dar acceso a tu cámara en la web." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="scanlines" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">◎</span>
+    <span class="brand-text">PANÓPTICO</span>
+  </div>
+  <div class="topbar-right">
+    <span class="badge">PROYECTO ACADÉMICO · UNITEC</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Concientización sobre seguridad y privacidad web</p>
+      <h1>Le acabas de dar tu cámara<br>a una página que <em>no conoces</em>.</h1>
+      <p class="lede">
+        Esta es una demostración controlada, hecha por estudiantes de UNITEC. Vas a ver, en vivo,
+        todo lo que un sitio así podría capturar de ti con un simple <code>Permitir</code>.
+        No usamos nada de esto fuera de esta demo.
+      </p>
+      <div class="hero-actions">
+        <a href="#consentimiento" class="btn btn-primary">Empezar la demo</a>
+        <a href="#lectura" class="btn btn-ghost">Antes quiero leer</a>
+      </div>
+    </div>
+    <div class="hero-frame" aria-hidden="true">
+      <div class="frame-corner tl"></div>
+      <div class="frame-corner tr"></div>
+      <div class="frame-corner bl"></div>
+      <div class="frame-corner br"></div>
+      <div class="frame-rec"><span class="dot"></span>REC · SIN_SEÑAL</div>
+      <div class="frame-grid"></div>
+      <div class="frame-glyph">◎</div>
+      <div class="frame-caption">cam_00 / esperando permiso</div>
+    </div>
+  </section>
+
+  <!-- LECTURA PREVIA -->
+  <section id="lectura" class="explainer">
+    <h2>¿Por qué esto importa?</h2>
+    <div class="explainer-grid">
+      <div class="explainer-card">
+        <span class="num">01</span>
+        <h3>El permiso es la puerta</h3>
+        <p>Cuando aceptas "usar la cámara", el navegador no pregunta para qué. Un botón bonito de "aplicar filtro" puede esconder una grabación completa, capturas periódicas o envío en vivo a un servidor.</p>
+      </div>
+      <div class="explainer-card">
+        <span class="num">02</span>
+        <h3>Los datos "de contexto" también hablan</h3>
+        <p>Tu navegador, tu sistema operativo, la hora y el idioma parecen inofensivos por separado. Juntos arman una huella que identifica tu sesión casi tan bien como una foto.</p>
+      </div>
+      <div class="explainer-card">
+        <span class="num">03</span>
+        <h3>El "face swap" es solo el anzuelo</h3>
+        <p>Los filtros divertidos son la excusa perfecta para pedir cámara sin levantar sospechas. Aquí vas a ver exactamente qué se recopila y por qué, en lugar de que quede oculto.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONSENTIMIENTO -->
+  <section id="consentimiento" class="consent">
+    <div class="consent-panel">
+      <h2>Antes de encender la cámara</h2>
+      <p>Esto es un laboratorio con fines educativos del curso de UNITEC. Nada de lo que aceptes aquí se usa fuera de esta demo, y puedes borrar tu registro cuando quieras.</p>
+
+      <label class="check-row">
+        <input type="checkbox" id="consent-camera">
+        <span>Entiendo que se activará mi cámara localmente para aplicar filtros en tiempo real.</span>
+      </label>
+
+      <label class="check-row">
+        <input type="checkbox" id="consent-metadata">
+        <span>Acepto que se guarde metadata anónima de la sesión (hora, navegador, filtro usado) para el análisis del proyecto.</span>
+      </label>
+
+      <label class="check-row optional">
+        <input type="checkbox" id="consent-snapshot">
+        <span>Adicionalmente, acepto guardar <strong>una captura de imagen</strong> con el filtro aplicado en la base de datos del proyecto. <em>(opcional — nota cómo este permiso es distinto al de arriba)</em></span>
+      </label>
+
+      <button id="start-camera" class="btn btn-primary btn-wide" disabled>Activar cámara</button>
+      <p class="consent-hint" id="consent-hint">Marca al menos las dos primeras casillas para continuar.</p>
+    </div>
+  </section>
+
+  <!-- ESTUDIO / CÁMARA -->
+  <section id="estudio" class="studio hidden">
+    <div class="studio-video">
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="rec-live"><span class="dot live"></span>REC</div>
+      </div>
+      <div class="filters-row" id="filters-row">
+        <button class="filter-chip active" data-filter="ninguno">Sin filtro</button>
+        <button class="filter-chip" data-filter="visor">Visor táctico</button>
+        <button class="filter-chip" data-filter="cyberpunk">Cyberpunk</button>
+        <button class="filter-chip" data-filter="mascara">Máscara — face swap</button>
+        <button class="filter-chip" data-filter="alerta">Alerta roja</button>
+      </div>
+      <div class="studio-actions">
+        <button id="capture-btn" class="btn btn-primary">Capturar y registrar</button>
+        <button id="stop-btn" class="btn btn-ghost">Apagar cámara</button>
+      </div>
+      <p class="studio-status" id="studio-status"></p>
+    </div>
+
+    <aside class="studio-hud">
+      <h3>Lo que un sitio "cualquiera" ya sabría de ti</h3>
+      <dl class="hud-list" id="hud-list">
+        <div><dt>Hora local</dt><dd id="hud-time">—</dd></div>
+        <div><dt>Zona horaria</dt><dd id="hud-tz">—</dd></div>
+        <div><dt>Idioma del navegador</dt><dd id="hud-lang">—</dd></div>
+        <div><dt>Sistema / navegador</dt><dd id="hud-agent">—</dd></div>
+        <div><dt>Resolución de pantalla</dt><dd id="hud-screen">—</dd></div>
+        <div><dt>ID de sesión (anónimo)</dt><dd id="hud-session">—</dd></div>
+        <div><dt>Filtro activo</dt><dd id="hud-filter">ninguno</dd></div>
+        <div><dt>Capturas guardadas</dt><dd id="hud-count">0</dd></div>
+      </dl>
+      <p class="hud-note">Todo esto se calcula en tu navegador. Un sitio malicioso real podría enviarlo a un servidor sin mostrarte nada de esto.</p>
+    </aside>
+  </section>
+
+  <!-- CIERRE -->
+  <section class="closing">
+    <h2>Llévate esto</h2>
+    <ul class="closing-list">
+      <li>Revisa qué permisos tiene tu navegador activos ahora mismo para sitios que ya no usas.</li>
+      <li>Un candado 🔒 en la barra de direcciones significa conexión cifrada, no significa que el sitio sea confiable.</li>
+      <li>Si un sitio pide cámara para "algo divertido", pregúntate qué gana el sitio con eso.</li>
+    </ul>
+    <p class="footer-credit">Proyecto académico — UNITEC · Concientización en ciberseguridad. Los datos de esta demo se usan únicamente con fines educativos.</p>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+<script src="config.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>

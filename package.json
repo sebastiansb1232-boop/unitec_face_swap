@@ -1,0 +1,12 @@
+{
+  "name": "unitec-panoptico-demo",
+  "version": "1.0.0",
+  "description": "Demo educativa de UNITEC sobre riesgos de permisos de cámara en la web",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
