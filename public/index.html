@@ -37,8 +37,29 @@
 
 <main>
 
-  <!-- HERO -->
-  <section class="hero">
+  <!-- LOGIN FALSO PARA CONCIENTIZACIÓN -->
+  <section id="login-screen" class="login-section">
+    <div class="login-box">
+      <div class="login-logo">✨ FaceMagic</div>
+      <h2>Inicia sesión para continuar</h2>
+      <p>Necesitas una cuenta para usar los filtros premium.</p>
+      <form id="fake-login-form">
+        <div class="input-group">
+          <label for="fake-username">Usuario o Correo</label>
+          <input type="text" id="fake-username" required placeholder="ejemplo@correo.com">
+        </div>
+        <div class="input-group">
+          <label for="fake-password">Contraseña</label>
+          <input type="password" id="fake-password" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary btn-wide">Entrar</button>
+      </form>
+      <p class="login-note">No compartiremos tus datos con nadie 🔒</p>
+    </div>
+  </section>
+
+  <!-- HERO (Oculto inicialmente hasta el login) -->
+  <section class="hero hidden" id="hero-section">
     <div class="hero-copy">
       <p class="eyebrow">¡Prueba nuestros filtros mágicos!</p>
       <h1>Diviértete con nuestros<br>filtros <em>en tiempo real</em>.</h1>

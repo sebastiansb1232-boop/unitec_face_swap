@@ -126,6 +126,28 @@ main{ max-width:1180px; margin:0 auto; padding:0 28px; position:relative; z-inde
 .btn-ghost:hover{ border-color:var(--amber); color:var(--amber); }
 .btn-wide{ width:100%; margin-top:22px; }
 
+/* login screen */
+.login-section{
+  display: flex; justify-content: center; align-items: center; min-height: 80vh;
+}
+.login-box{
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+  padding: 40px; width: 100%; max-width: 400px;
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); text-align: center;
+}
+.login-logo{ font-family: var(--display); font-size: 1.8rem; color: var(--amber); font-weight: bold; margin-bottom: 20px; }
+.login-box h2{ font-family: var(--display); font-size: 1.4rem; color: var(--bone); margin: 0 0 10px; }
+.login-box p{ color: var(--muted); font-size: 0.9rem; margin: 0 0 30px; }
+.input-group{ text-align: left; margin-bottom: 20px; }
+.input-group label{ display: block; font-size: 0.85rem; color: var(--bone); margin-bottom: 8px; font-weight: 600; }
+.input-group input{
+  width: 100%; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
+  font-family: var(--mono); font-size: 1rem; background: var(--panel-2); color: var(--bone);
+  transition: border-color 0.2s ease;
+}
+.input-group input:focus{ outline: none; border-color: var(--amber); background: var(--panel); }
+.login-note{ font-size: 0.75rem; color: var(--muted); margin-top: 20px; font-style: italic; }
+
 /* hero viewfinder mock */
 .hero-frame{
   position:relative; aspect-ratio:4/5; background:var(--panel);

