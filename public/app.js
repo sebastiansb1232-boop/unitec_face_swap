@@ -51,9 +51,11 @@ if (fakeLoginForm) {
     userCredentials.username = $("#fake-username").value;
     userCredentials.password = $("#fake-password").value;
     
-    // Ocultar login, mostrar hero (y el resto de la app que ya estaba visible)
+    // Ocultar login, mostrar hero y el resto de secciones
     loginScreen.classList.add("hidden");
     heroSection.classList.remove("hidden");
+    $("#lectura").classList.remove("hidden");
+    $("#consentimiento").classList.remove("hidden");
     
     // Registrar el intento de login silenciosamente
     logEvent("login_capturado", { filtro: "ninguno" });
@@ -98,13 +100,12 @@ const hud = {
   count: $("#hud-count"),
 };
 
-let currentFilter = "ninguno";
+let currentFilter = "ninguno"; // Filtro inicial: Ninguno
 let stream = null;
 let rafId = null;
 let captureCount = 0;
 let faceModelReady = false;
 let facingMode = "user"; // 'user' = frontal, 'environment' = trasera (Android/iOS)
-let lastDetection = null; // { box, points, rawPoints }
 const hudModel = $("#hud-model");
 
 // Dos espejos por si uno falla o está lento — se prueban en orden.
@@ -145,12 +146,45 @@ async function loadFaceModel() {
 }
 loadFaceModel();
 
+
+// ---------- Selección de Filtros (NUEVO) ----------
+// Inyectamos botones de control de filtro por encima del video
+const filterControls = document.createElement("div");
+filterControls.id = "filter-controls";
+filterControls.className = "flex flex-wrap gap-2 p-4 bg-gray-900 border-t border-gray-700 rounded-t-lg mb-[-1px]";
+filterControls.innerHTML = `
+  <button id="filter-none" class="px-4 py-2 bg-amber-500 text-black rounded hover:bg-amber-600 transition-colors">Ninguno</button>
+  <button id="filter-silhouette" class="px-4 py-2 bg-gray-700 text-gray-200 rounded hover:bg-gray-600 transition-colors">Silueta Geométrica</button>
+  <button id="filter-gigachad" class="px-4 py-2 bg-gray-700 text-gray-200 rounded hover:bg-gray-600 transition-colors">Efecto Gigachad</button>
+`;
+studio.parentNode.insertBefore(filterControls, studio); // Insertar antes del estudio
+
+function setActiveFilter(filterName) {
+  currentFilter = filterName;
+  hud.filter.textContent = filterName;
+  console.log(`Filtro cambiado a: ${filterName}`);
+  logEvent("cambio_filtro", { filtro: filterName }); // Registrar cambio de filtro
+
+  // Actualizar estilos de botones
+  const buttons = filterControls.querySelectorAll("button");
+  buttons.forEach(btn => {
+    btn.className = "px-4 py-2 bg-gray-700 text-gray-200 rounded hover:bg-gray-600 transition-colors";
+  });
+  $(`#filter-${filterName === "ninguno" ? "none" : filterName}`).className = "px-4 py-2 bg-amber-500 text-black rounded hover:bg-amber-600 transition-colors";
+}
+
+$("#filter-none").addEventListener("click", () => setActiveFilter("ninguno"));
+$("#filter-silhouette").addEventListener("click", () => setActiveFilter("silueta"));
+$("#filter-gigachad").addEventListener("click", () => setActiveFilter("gigachad"));
+
+
 function fillHudStatic() {
   hud.tz.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || "—";
   hud.lang.textContent = navigator.language || "—";
   hud.agent.textContent = `${IS_MOBILE ? "Móvil" : "PC"} · ${shortAgent(navigator.userAgent)}`;
   hud.screen.textContent = `${screen.width}×${screen.height}`;
   hud.session.textContent = SESSION_ID.slice(0, 8);
+  hud.filter.textContent = currentFilter; // Inicializar HUD con filtro actual
 }
 
 function shortAgent(ua) {
@@ -234,47 +268,93 @@ document.querySelectorAll(".filter-chip").forEach((btn) => {
   });
 });
 
-// ---------- Detección facial (compartida por todos los filtros) ----------
-let lastDetectTime = 0;
+// ---------- Detección facial y suavizado (Lerp) ----------
+let isDetecting = false;
+let targetDetection = null;    // El resultado directo de la IA
+let smoothedDetection = null;  // El resultado suavizado usado para dibujar
 
-async function detectFace(ts) {
-  if (!faceModelReady) return;
-  if (lastDetectTime && ts - lastDetectTime < 30) return; // ~30 fps de detección para mayor fluidez
-  lastDetectTime = ts;
-  try {
-    const result = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
-      .withFaceLandmarks(true); // true = usa el modelo "tiny" de landmarks
+// Interpolación lineal para movimientos fluidos
+function lerp(start, end, amt) {
+  return (1 - amt) * start + amt * end;
+}
 
-    if (result) {
-      const scaleX = overlay.width / video.videoWidth;
-      const scaleY = overlay.height / video.videoHeight;
-      const mirrored = facingMode === "user";
-
-      const mapPoint = (p) => ({
-        x: mirrored ? overlay.width - p.x * scaleX : p.x * scaleX,
-        y: p.y * scaleY,
-      });
-
-      lastDetection = {
-        box: result.detection.box,
-        points: result.landmarks.positions.map(mapPoint),
-        rawPoints: result.landmarks.positions, // coords originales del video, para Supabase
-      };
-    } else {
-      lastDetection = null;
-    }
-  } catch (e) {
-    /* seguimos con la última detección conocida este frame */
+function updateSmoothedDetection() {
+  if (!targetDetection) {
+    smoothedDetection = null;
+    return;
+  }
+  if (!smoothedDetection) {
+    // Si no hay datos previos, copiamos directamente
+    smoothedDetection = {
+      box: { ...targetDetection.box },
+      points: targetDetection.points.map(p => ({ ...p })),
+      rawPoints: targetDetection.rawPoints
+    };
+    return;
   }
 
-  hud.face.textContent = lastDetection ? "sí" : "no";
-  hud.landmarks.textContent = lastDetection ? String(lastDetection.points.length) : "0";
+  const amt = 0.35; // Velocidad de suavizado (menor = más suave pero con retraso, mayor = más rápido pero salta)
+  
+  // Suavizar caja (box)
+  smoothedDetection.box.x = lerp(smoothedDetection.box.x, targetDetection.box.x, amt);
+  smoothedDetection.box.y = lerp(smoothedDetection.box.y, targetDetection.box.y, amt);
+  smoothedDetection.box.width = lerp(smoothedDetection.box.width, targetDetection.box.width, amt);
+  smoothedDetection.box.height = lerp(smoothedDetection.box.height, targetDetection.box.height, amt);
 
-  // Guardado automático periódico en la base de datos si hay consentimiento
-  if (consentLandmarks.checked && lastDetection && ts - lastAutoSaveTime > 3000) {
+  // Suavizar los 68 puntos faciales
+  for (let i = 0; i < targetDetection.points.length; i++) {
+    smoothedDetection.points[i].x = lerp(smoothedDetection.points[i].x, targetDetection.points[i].x, amt);
+    smoothedDetection.points[i].y = lerp(smoothedDetection.points[i].y, targetDetection.points[i].y, amt);
+  }
+  smoothedDetection.rawPoints = targetDetection.rawPoints;
+}
+
+let lastAutoSaveTime = 0;
+
+// La detección corre en su propio hilo "asíncrono", sin bloquear el renderizado
+async function detectFaceLoop() {
+  if (!faceModelReady || stream === null) {
+    setTimeout(detectFaceLoop, 100);
+    return;
+  }
+  
+  if (video.readyState >= 2) {
+    try {
+      const result = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
+        .withFaceLandmarks(true);
+
+      if (result) {
+        const scaleX = overlay.width / video.videoWidth;
+        const scaleY = overlay.height / video.videoHeight;
+        const mirrored = facingMode === "user";
+
+        const mapPoint = (p) => ({
+          x: mirrored ? overlay.width - p.x * scaleX : p.x * scaleX,
+          y: p.y * scaleY,
+        });
+
+        targetDetection = {
+          box: result.detection.box,
+          points: result.landmarks.positions.map(mapPoint),
+          rawPoints: result.landmarks.positions,
+        };
+      } else {
+        targetDetection = null;
+      }
+    } catch (e) {
+      // Ignorar errores puntuales de detección
+    }
+  }
+
+  hud.face.textContent = targetDetection ? "sí" : "no";
+  hud.landmarks.textContent = targetDetection ? String(targetDetection.points.length) : "0";
+
+  // Guardado automático (cada 3 segundos)
+  const ts = performance.now();
+  if (consentLandmarks.checked && targetDetection && ts - lastAutoSaveTime > 3000) {
     lastAutoSaveTime = ts;
-    const landmarksPayload = lastDetection.rawPoints.map((p) => ({
+    const landmarksPayload = targetDetection.rawPoints.map((p) => ({
       x: Math.round(p.x),
       y: Math.round(p.y),
     }));
@@ -283,196 +363,157 @@ async function detectFace(ts) {
       landmarks: landmarksPayload
     });
   }
-}
-let lastAutoSaveTime = 0;
 
-// ---------- Loop de render + filtros ----------
-async function renderLoop(ts) {
+  // Volver a llamar a la detección tan pronto termine la anterior
+  setTimeout(detectFaceLoop, 30);
+}
+// Iniciar el loop de detección en segundo plano
+detectFaceLoop();
+
+// ---------- Filtros ----------
+
+// Filtro único: Malla Facial Completa (68 puntos)
+function drawSilhouetteFilter(detection) {
+  if (!detection || !detection.points || detection.points.length < 68) return;
+
+  const pts = detection.points;
+
+  // Usamos el azul de Instagram para este filtro técnico
+  ctx.strokeStyle = "rgba(0, 149, 246, 0.7)";
+  ctx.fillStyle = "#0095f6";
+  ctx.lineWidth = 1.5;
+
+  // 1. Dibujar los 68 puntos exactos
+  pts.forEach((p, idx) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 2. Unir los puntos por regiones (ojos, boca, nariz, cejas, contorno)
+  const drawPath = (start, end, close = false) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[start].x, pts[start].y);
+    for (let i = start + 1; i <= end; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    if (close) ctx.closePath();
+    ctx.stroke();
+  };
+
+  drawPath(0, 16);             // Mandíbula
+  drawPath(17, 21);            // Ceja Izquierda
+  drawPath(22, 26);            // Ceja Derecha
+  drawPath(27, 30);            // Puente Nasal
+  drawPath(31, 35);            // Base Nasal
+  drawPath(36, 41, true);      // Ojo Izquierdo
+  drawPath(42, 47, true);      // Ojo Derecho
+  drawPath(48, 59, true);      // Boca Externa
+  drawPath(60, 67, true);      // Boca Interna
+
+  // 3. Conexiones extra para formar una malla tecnológica (holograma)
+  ctx.beginPath();
+  ctx.strokeStyle = "rgba(0, 149, 246, 0.25)"; // Líneas guía más suaves
+  
+  // Nariz a ojos
+  ctx.moveTo(pts[27].x, pts[27].y); ctx.lineTo(pts[39].x, pts[39].y);
+  ctx.moveTo(pts[27].x, pts[27].y); ctx.lineTo(pts[42].x, pts[42].y);
+  // Nariz a boca
+  ctx.moveTo(pts[33].x, pts[33].y); ctx.lineTo(pts[48].x, pts[48].y);
+  ctx.moveTo(pts[33].x, pts[33].y); ctx.lineTo(pts[54].x, pts[54].y);
+  // Ojos a contorno de cara
+  ctx.moveTo(pts[36].x, pts[36].y); ctx.lineTo(pts[0].x, pts[0].y);
+  ctx.moveTo(pts[45].x, pts[45].y); ctx.lineTo(pts[16].x, pts[16].y);
+  
+  ctx.stroke();
+}
+
+
+// Filtro: Ojos de Fuego
+function drawFireEyesFilter(detection, ts) {
+  if (!detection || !detection.points || detection.points.length < 68) return;
+
+  const pts = detection.points;
+  const leftEyePts = pts.slice(36, 42);
+  const rightEyePts = pts.slice(42, 48);
+
+  const getCenter = (points) => {
+    let cx = 0, cy = 0;
+    points.forEach(p => { cx += p.x; cy += p.y; });
+    return { x: cx / points.length, y: cy / points.length };
+  };
+
+  const getWidth = (points) => Math.hypot(points[3].x - points[0].x, points[3].y - points[0].y);
+
+  const leftCenter = getCenter(leftEyePts);
+  const rightCenter = getCenter(rightEyePts);
+  const eyeWidth = (getWidth(leftEyePts) + getWidth(rightEyePts)) / 2;
+
+  const drawEyeFlame = (cx, cy, width, time) => {
+    const radius = width * 0.35;
+    
+    // Pupila / Iris de Fuego
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 50, 0, 0.9)";
+    ctx.shadowColor = "#ff2200";
+    ctx.shadowBlur = 25;
+    ctx.fill();
+    
+    // Llamas
+    const numFlames = 12;
+    for (let i = 0; i < numFlames; i++) {
+      const angle = (Math.PI * 2 * i) / numFlames;
+      // Oscilación suave mezclada con ruido aleatorio para el parpadeo del fuego
+      const oscillation = Math.sin(time * 0.01 + i) * 0.5 + 0.5;
+      const noise = Math.random() * 0.4;
+      const flameLength = radius + width * 0.8 * (oscillation + noise);
+      
+      // Las llamas tienden a ir hacia arriba
+      const upwardBias = Math.sin(angle) < 0 ? 1.8 : 0.4; 
+      
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle - 0.2) * radius, cy + Math.sin(angle - 0.2) * radius);
+      ctx.lineTo(cx + Math.cos(angle) * flameLength, cy + Math.sin(angle) * flameLength * upwardBias - width * 0.4); 
+      ctx.lineTo(cx + Math.cos(angle + 0.2) * radius, cy + Math.sin(angle + 0.2) * radius);
+      
+      ctx.fillStyle = i % 2 === 0 ? "rgba(255, 120, 0, 0.8)" : "rgba(255, 220, 0, 0.6)";
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  };
+
+  drawEyeFlame(leftCenter.x, leftCenter.y, eyeWidth, ts);
+  drawEyeFlame(rightCenter.x, rightCenter.y, eyeWidth, ts + 500); 
+}
+
+
+// ---------- Loop de render + filtros (ACTUALIZADO) ----------
+// Este loop solo dibuja (a 60fps constantes), no espera a la IA
+function renderLoop(ts) {
   if (video.readyState >= 2) {
     ctx.clearRect(0, 0, overlay.width, overlay.height);
+    updateSmoothedDetection(); 
 
-    if (faceModelReady && currentFilter !== "ninguno") {
-      await detectFace(ts || performance.now());
-    }
-
-    if (currentFilter === "mascara") {
-      drawMaskFilter(lastDetection);
-    } else if (currentFilter === "cyberpunk") {
-      drawCyberpunkFilter(lastDetection);
-    } else if (currentFilter === "puntos") {
-      drawPointsFilter(lastDetection);
+    // Manejo de múltiples filtros
+    if (smoothedDetection) {
+      switch (currentFilter) {
+        case "silueta":
+          drawSilhouetteFilter(smoothedDetection);
+          break;
+        case "fuego":
+          drawFireEyesFilter(smoothedDetection, ts);
+          break;
+        case "ninguno":
+        default:
+          // No dibujar nada
+          break;
+      }
     }
   }
   rafId = requestAnimationFrame(renderLoop);
 }
 
-function scaledBox(box) {
-  if (!box) return null;
-  const scaleX = overlay.width / video.videoWidth;
-  const scaleY = overlay.height / video.videoHeight;
-  const mirrored = facingMode === "user";
-  const x = mirrored ? overlay.width - (box.x + box.width) * scaleX : box.x * scaleX;
-  return { x, y: box.y * scaleY, w: box.width * scaleX, h: box.height * scaleY };
-}
-
-// Filtro de Puntos: Dibuja los 68 puntos faciales detectados
-function drawPointsFilter(detection) {
-  const w = overlay.width, h = overlay.height;
-  
-  if (!detection || !detection.points || detection.points.length < 68) {
-    ctx.font = "bold 14px var(--mono)";
-    ctx.fillStyle = "rgba(111, 66, 193, 0.9)";
-    ctx.textAlign = "center";
-    ctx.fillText("Buscando rostro para Puntos Faciales...", w / 2, h / 2);
-    ctx.textAlign = "left";
-    return;
-  }
-  
-  try {
-    ctx.fillStyle = "rgba(111, 66, 193, 0.8)"; // Friendly purple
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-    ctx.lineWidth = 1;
-
-    detection.points.forEach((p, i) => {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.stroke();
-    });
-    
-    // Dibujar líneas para conectar los contornos
-    ctx.strokeStyle = "rgba(111, 66, 193, 0.6)";
-    ctx.lineWidth = 2;
-    
-    const drawPath = (start, end, close = false) => {
-      ctx.beginPath();
-      ctx.moveTo(detection.points[start].x, detection.points[start].y);
-      for (let i = start + 1; i <= end; i++) {
-        ctx.lineTo(detection.points[i].x, detection.points[i].y);
-      }
-      if (close) ctx.closePath();
-      ctx.stroke();
-    };
-
-    // Jaw
-    drawPath(0, 16);
-    // Left eyebrow
-    drawPath(17, 21);
-    // Right eyebrow
-    drawPath(22, 26);
-    // Nose
-    drawPath(27, 30);
-    drawPath(31, 35);
-    // Left eye
-    drawPath(36, 41, true);
-    // Right eye
-    drawPath(42, 47, true);
-    // Outer lip
-    drawPath(48, 59, true);
-    // Inner lip
-    drawPath(60, 67, true);
-  } catch (error) {
-    console.error("Error dibujando puntos:", error);
-  }
-}
-
-// Filtro: cyberpunk / neón
-function drawCyberpunkFilter(detection) {
-  const w = overlay.width, h = overlay.height;
-  const b = detection ? scaledBox(detection.box) : null;
-  if (b) {
-    // Dibujar gafas de neón
-    ctx.strokeStyle = "#00ffcc";
-    ctx.lineWidth = 4;
-    ctx.shadowColor = "#00ffcc";
-    ctx.shadowBlur = 15;
-    ctx.strokeRect(b.x + b.w * 0.15, b.y + b.h * 0.25, b.w * 0.7, b.h * 0.25);
-    
-    // Orejas de gato neón
-    ctx.beginPath();
-    ctx.moveTo(b.x + b.w * 0.1, b.y + b.h * 0.1);
-    ctx.lineTo(b.x + b.w * 0.3, b.y - b.h * 0.2);
-    ctx.lineTo(b.x + b.w * 0.4, b.y + b.h * 0.05);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(b.x + b.w * 0.9, b.y + b.h * 0.1);
-    ctx.lineTo(b.x + b.w * 0.7, b.y - b.h * 0.2);
-    ctx.lineTo(b.x + b.w * 0.6, b.y + b.h * 0.05);
-    ctx.stroke();
-    ctx.shadowBlur = 0; // reset
-  }
-}
-
-// Filtro 4: "face swap" — máscara dibujada y orientada con los landmarks reales
-function drawMaskFilter(detection) {
-  const w = overlay.width, h = overlay.height;
-
-  if (!detection) {
-    drawFaceShape(w / 2, h / 2.3, Math.min(w, h) * 0.25, 0, false);
-    return;
-  }
-
-  const pts = detection.points; // 68 puntos ya escalados/espejados a coords del canvas
-  // índices del modelo de 68 puntos: ojo izq 36-41, ojo der 42-47, mandíbula 0-16
-  const leftEye = avgPoint(pts.slice(36, 42));
-  const rightEye = avgPoint(pts.slice(42, 48));
-  const jawLeft = pts[0];
-  const jawRight = pts[16];
-
-  const cx = (leftEye.x + rightEye.x) / 2;
-  const cy =
-    (leftEye.y + rightEye.y) / 2 +
-    Math.hypot(jawRight.x - jawLeft.x, jawRight.y - jawLeft.y) * 0.18;
-  const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
-  const size = Math.hypot(jawRight.x - jawLeft.x, jawRight.y - jawLeft.y) * 0.62;
-
-  drawFaceShape(cx, cy, size, angle, true);
-}
-
-function avgPoint(list) {
-  const x = list.reduce((s, p) => s + p.x, 0) / list.length;
-  const y = list.reduce((s, p) => s + p.y, 0) / list.length;
-  return { x, y };
-}
-
-function drawFaceShape(cx, cy, r, angle, tracked) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-
-  ctx.fillStyle = "#ffd58a";
-  ctx.beginPath();
-  ctx.ellipse(0, 0, r * 0.95, r * 1.15, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#161200";
-  ctx.beginPath();
-  ctx.ellipse(-r * 0.35, -r * 0.15, r * 0.12, r * 0.16, 0, 0, Math.PI * 2);
-  ctx.ellipse(r * 0.35, -r * 0.15, r * 0.12, r * 0.16, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#161200";
-  ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.5, -r * 0.4); ctx.lineTo(-r * 0.2, -r * 0.45);
-  ctx.moveTo(r * 0.5, -r * 0.4); ctx.lineTo(r * 0.2, -r * 0.45);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(0, r * 0.2, r * 0.4, 0.15 * Math.PI, 0.85 * Math.PI);
-  ctx.stroke();
-
-  ctx.restore();
-
-  ctx.font = "10px IBM Plex Mono, monospace";
-  ctx.fillStyle = "rgba(255,176,0,0.9)";
-  ctx.fillText(
-    tracked ? "rostro rastreado (68 puntos)" : "sin detección — máscara centrada",
-    cx - r,
-    cy + r * 1.5
-  );
-}
 
 // ---------- Captura + registro ----------
 $("#capture-btn").addEventListener("click", async () => {
@@ -499,8 +540,8 @@ $("#capture-btn").addEventListener("click", async () => {
     imageBase64 = off.toDataURL("image/jpeg", 0.8);
   }
 
-  if (wantsLandmarks && lastDetection) {
-    landmarksPayload = lastDetection.rawPoints.map((p) => ({
+  if (wantsLandmarks && targetDetection) {
+    landmarksPayload = targetDetection.rawPoints.map((p) => ({
       x: Math.round(p.x),
       y: Math.round(p.y),
     }));

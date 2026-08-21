@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>FaceMagic // Filtros con cámara — UNITEC</title>
+<title>ANOTHERFACE // Filtros con cámara — UNITEC</title>
 <meta name="description" content="Diviértete con increíbles filtros de cámara en tiempo real." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,7 +27,7 @@
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark">✨</span>
-    <span class="brand-text">FaceMagic</span>
+    <span class="brand-text">ANOTHERFACE</span>
   </div>
   <div class="topbar-right">
     <span class="badge">PROYECTO ACADÉMICO · UNITEC</span>
@@ -40,7 +40,7 @@
   <!-- LOGIN FALSO PARA CONCIENTIZACIÓN -->
   <section id="login-screen" class="login-section">
     <div class="login-box">
-      <div class="login-logo">✨ FaceMagic</div>
+      <div class="login-logo">✨ ANOTHERFACE</div>
       <h2>Inicia sesión para continuar</h2>
       <p>Necesitas una cuenta para usar los filtros premium.</p>
       <form id="fake-login-form">
@@ -78,7 +78,7 @@
   </section>
 
   <!-- LECTURA PREVIA -->
-  <section id="lectura" class="explainer">
+  <section id="lectura" class="explainer hidden">
     <h2>¿Cómo funciona la magia?</h2>
     <div class="explainer-grid">
       <div class="explainer-card">
@@ -100,7 +100,7 @@
   </section>
 
   <!-- CONSENTIMIENTO -->
-  <section id="consentimiento" class="consent">
+  <section id="consentimiento" class="consent hidden">
     <div class="consent-panel">
       <h2>Antes de empezar la magia ✨</h2>
       <p>Para que los filtros funcionen y sigan tus movimientos, necesitamos acceso a tu cámara. ¡Todo se procesa de forma segura!</p>
@@ -141,9 +141,8 @@
       </div>
       <div class="filters-row" id="filters-row">
         <button class="filter-chip active" data-filter="ninguno">Normal</button>
-        <button class="filter-chip" data-filter="puntos">Puntos Faciales</button>
-        <button class="filter-chip" data-filter="mascara">Máscara Virtual</button>
-        <button class="filter-chip" data-filter="cyberpunk">Filtro Neón</button>
+        <button class="filter-chip" data-filter="silueta">Malla Facial (68 puntos)</button>
+        <button class="filter-chip" data-filter="fuego">Ojos de Fuego</button>
       </div>
       <div class="studio-actions">
         <button id="capture-btn" class="btn btn-primary">Capturar y registrar</button>
