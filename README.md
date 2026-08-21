@@ -1,4 +1,4 @@
-# PANÓPTICO — demo educativa (UNITEC)
+# ANOTHERFACE — demo educativa (UNITEC)
 
 Página web que pide acceso a la cámara (funciona igual en **PC y Android**,
 diseño responsive), aplica filtros en vivo que **siguen tu rostro** usando
