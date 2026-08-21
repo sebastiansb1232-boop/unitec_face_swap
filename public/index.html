@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>PANÓPTICO // Filtros con cámara — UNITEC</title>
-<meta name="description" content="Demo educativa de UNITEC sobre los riesgos de dar acceso a tu cámara en la web." />
+<title>FaceMagic // Filtros con cámara — UNITEC</title>
+<meta name="description" content="Diviértete con increíbles filtros de cámara en tiempo real." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -26,8 +26,8 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">◎</span>
-    <span class="brand-text">PANÓPTICO</span>
+    <span class="brand-mark">✨</span>
+    <span class="brand-text">FaceMagic</span>
   </div>
   <div class="topbar-right">
     <span class="badge">PROYECTO ACADÉMICO · UNITEC</span>
@@ -40,48 +40,40 @@
   <!-- HERO -->
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">Concientización sobre seguridad y privacidad web</p>
-      <h1>Le acabas de dar tu cámara<br>a una página que <em>no conoces</em>.</h1>
+      <p class="eyebrow">¡Prueba nuestros filtros mágicos!</p>
+      <h1>Diviértete con nuestros<br>filtros <em>en tiempo real</em>.</h1>
       <p class="lede">
-        Esta es una demostración controlada, hecha por estudiantes de UNITEC. Vas a ver, en vivo,
-        todo lo que un sitio así podría capturar de ti con un simple <code>Permitir</code>.
-        No usamos nada de esto fuera de esta demo.
+        Esta es una demostración de cómo podemos usar tecnología de detección facial para crear filtros increíbles que siguen tu rostro. ¡Pruébalo ahora y diviértete!
       </p>
       <div class="hero-actions">
-        <a href="#consentimiento" class="btn btn-primary">Empezar la demo</a>
-        <a href="#lectura" class="btn btn-ghost">Antes quiero leer</a>
+        <a href="#consentimiento" class="btn btn-primary">Empezar a jugar</a>
+        <a href="#lectura" class="btn btn-ghost">¿Cómo funciona?</a>
       </div>
     </div>
-    <div class="hero-frame" aria-hidden="true">
-      <div class="frame-corner tl"></div>
-      <div class="frame-corner tr"></div>
-      <div class="frame-corner bl"></div>
-      <div class="frame-corner br"></div>
-      <div class="frame-rec"><span class="dot"></span>REC · SIN_SEÑAL</div>
-      <div class="frame-grid"></div>
-      <div class="frame-glyph">◎</div>
-      <div class="frame-caption">cam_00 / esperando permiso</div>
+    <div class="hero-frame" aria-hidden="true" style="border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); background: var(--panel-2); border: none;">
+      <div class="frame-glyph" style="color: var(--amber);">✨</div>
+      <div class="frame-caption">Cámara lista para la magia</div>
     </div>
   </section>
 
   <!-- LECTURA PREVIA -->
   <section id="lectura" class="explainer">
-    <h2>¿Por qué esto importa?</h2>
+    <h2>¿Cómo funciona la magia?</h2>
     <div class="explainer-grid">
       <div class="explainer-card">
         <span class="num">01</span>
-        <h3>El permiso es la puerta</h3>
-        <p>Cuando aceptas "usar la cámara", el navegador no pregunta para qué. Un botón bonito de "aplicar filtro" puede esconder una grabación completa, capturas periódicas o envío en vivo a un servidor.</p>
+        <h3>Detección en tiempo real</h3>
+        <p>Nuestro modelo de IA escanea el video de tu cámara localmente en tu navegador. Encuentra tu rostro y dibuja una malla invisible sobre él muy rápidamente.</p>
       </div>
       <div class="explainer-card">
         <span class="num">02</span>
-        <h3>Los datos "de contexto" también hablan</h3>
-        <p>Tu navegador, tu sistema operativo, la hora y el idioma parecen inofensivos por separado. Juntos arman una huella que identifica tu sesión casi tan bien como una foto.</p>
+        <h3>68 Puntos Faciales</h3>
+        <p>Identificamos exactamente dónde están tus ojos, cejas, nariz y boca. Estos 68 puntos nos permiten saber hacia dónde miras y cuándo sonríes.</p>
       </div>
       <div class="explainer-card">
         <span class="num">03</span>
-        <h3>El "face swap" es solo el anzuelo</h3>
-        <p>Los filtros divertidos son la excusa perfecta para pedir cámara sin levantar sospechas. Aquí vas a ver exactamente qué se recopila y por qué, en lugar de que quede oculto.</p>
+        <h3>Filtros dinámicos</h3>
+        <p>Usamos estos puntos para anclar las máscaras y efectos, haciendo que sigan tus movimientos fluidamente y en 3D simulado. ¡Totalmente en vivo!</p>
       </div>
     </div>
   </section>
@@ -89,31 +81,31 @@
   <!-- CONSENTIMIENTO -->
   <section id="consentimiento" class="consent">
     <div class="consent-panel">
-      <h2>Antes de encender la cámara</h2>
-      <p>Esto es un laboratorio con fines educativos del curso de UNITEC. Nada de lo que aceptes aquí se usa fuera de esta demo, y puedes borrar tu registro cuando quieras.</p>
+      <h2>Antes de empezar la magia ✨</h2>
+      <p>Para que los filtros funcionen y sigan tus movimientos, necesitamos acceso a tu cámara. ¡Todo se procesa de forma segura!</p>
 
       <label class="check-row">
         <input type="checkbox" id="consent-camera">
-        <span>Entiendo que se activará mi cámara localmente para aplicar filtros en tiempo real.</span>
+        <span>Permito el uso de mi cámara para aplicar los filtros en tiempo real.</span>
       </label>
 
       <label class="check-row">
         <input type="checkbox" id="consent-metadata">
-        <span>Acepto que se guarde metadata anónima de la sesión (hora, navegador, filtro usado) para el análisis del proyecto.</span>
+        <span>Acepto guardar información anónima (como el filtro que más uso) para mejorar la app.</span>
       </label>
 
       <label class="check-row optional">
         <input type="checkbox" id="consent-snapshot">
-        <span>Adicionalmente, acepto guardar <strong>una captura de imagen</strong> con el filtro aplicado en la base de datos del proyecto. <em>(opcional — nota cómo este permiso es distinto al de arriba)</em></span>
+        <span>¡Quiero guardar fotos divertidas! Acepto que se guarde una captura de imagen en la galería. <em>(Opcional)</em></span>
       </label>
 
       <label class="check-row optional">
         <input type="checkbox" id="consent-landmarks">
-        <span>Adicionalmente, acepto que se lean y guarden <strong>los puntos de mi rostro</strong> (posición de ojos, cejas, nariz y boca) que usa el filtro para seguir mi cara. <em>(opcional — esto es un dato biométrico, distinto a guardar una foto)</em></span>
+        <span>Permitir guardar los puntos de mi rostro para análisis avanzado de los filtros. <em>(Opcional)</em></span>
       </label>
 
-      <button id="start-camera" class="btn btn-primary btn-wide" disabled>Activar cámara</button>
-      <p class="consent-note">Funciona en la cámara de tu compu o en la cámara frontal/trasera de tu celular — el navegador te va a preguntar cuál usar.</p>
+      <button id="start-camera" class="btn btn-primary btn-wide" disabled>¡Activar cámara!</button>
+      <p class="consent-note">Funciona con la cámara de tu compu o de tu cel.</p>
       <p class="consent-hint" id="consent-hint">Marca al menos las dos primeras casillas para continuar.</p>
     </div>
   </section>
@@ -127,11 +119,10 @@
         <div class="rec-live"><span class="dot live"></span>REC</div>
       </div>
       <div class="filters-row" id="filters-row">
-        <button class="filter-chip active" data-filter="ninguno">Sin filtro</button>
-        <button class="filter-chip" data-filter="visor">Visor táctico</button>
-        <button class="filter-chip" data-filter="cyberpunk">Cyberpunk</button>
-        <button class="filter-chip" data-filter="mascara">Máscara — face swap</button>
-        <button class="filter-chip" data-filter="alerta">Alerta roja</button>
+        <button class="filter-chip active" data-filter="ninguno">Normal</button>
+        <button class="filter-chip" data-filter="puntos">Puntos Faciales</button>
+        <button class="filter-chip" data-filter="mascara">Máscara Virtual</button>
+        <button class="filter-chip" data-filter="cyberpunk">Filtro Neón</button>
       </div>
       <div class="studio-actions">
         <button id="capture-btn" class="btn btn-primary">Capturar y registrar</button>

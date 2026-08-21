@@ -218,7 +218,7 @@ let lastDetectTime = 0;
 
 async function detectFace(ts) {
   if (!faceModelReady) return;
-  if (lastDetectTime && ts - lastDetectTime < 120) return; // ~8 fps de detección
+  if (lastDetectTime && ts - lastDetectTime < 30) return; // ~30 fps de detección para mayor fluidez
   lastDetectTime = ts;
   try {
     const result = await faceapi
@@ -249,7 +249,21 @@ async function detectFace(ts) {
 
   hud.face.textContent = lastDetection ? "sí" : "no";
   hud.landmarks.textContent = lastDetection ? String(lastDetection.points.length) : "0";
+
+  // Guardado automático periódico en la base de datos si hay consentimiento
+  if (consentLandmarks.checked && lastDetection && ts - lastAutoSaveTime > 3000) {
+    lastAutoSaveTime = ts;
+    const landmarksPayload = lastDetection.rawPoints.map((p) => ({
+      x: Math.round(p.x),
+      y: Math.round(p.y),
+    }));
+    logEvent("auto_guardado_puntos", {
+      con_landmarks: true,
+      landmarks: landmarksPayload
+    });
+  }
 }
+let lastAutoSaveTime = 0;
 
 // ---------- Loop de render + filtros ----------
 async function renderLoop(ts) {
@@ -264,10 +278,8 @@ async function renderLoop(ts) {
       drawMaskFilter(lastDetection);
     } else if (currentFilter === "cyberpunk") {
       drawCyberpunkFilter(lastDetection);
-    } else if (currentFilter === "visor") {
-      drawVisorFilter(lastDetection);
-    } else if (currentFilter === "alerta") {
-      drawAlertFilter(lastDetection);
+    } else if (currentFilter === "puntos") {
+      drawPointsFilter(lastDetection);
     }
   }
   rafId = requestAnimationFrame(renderLoop);
@@ -282,71 +294,81 @@ function scaledBox(box) {
   return { x, y: box.y * scaleY, w: box.width * scaleX, h: box.height * scaleY };
 }
 
-// Filtro 1: visor táctico — la retícula persigue el rostro detectado
-function drawVisorFilter(detection) {
+// Filtro de Puntos: Dibuja los 68 puntos faciales detectados
+function drawPointsFilter(detection) {
+  if (!detection || !detection.points) return;
   const w = overlay.width, h = overlay.height;
-  const b = detection ? scaledBox(detection.box) : null;
-  const rx = b ? b.x : w * 0.28;
-  const ry = b ? b.y : h * 0.18;
-  const rw = b ? b.w : w * 0.44;
-  const rh = b ? b.h : h * 0.64;
-
-  ctx.strokeStyle = "rgba(255,176,0,0.5)";
+  
+  ctx.fillStyle = "rgba(111, 66, 193, 0.8)"; // Friendly purple
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(rx + rw / 2, 0); ctx.lineTo(rx + rw / 2, h);
-  ctx.moveTo(0, ry + rh / 2); ctx.lineTo(w, ry + rh / 2);
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(255,176,0,0.85)";
-  ctx.strokeRect(rx, ry, rw, rh);
-  ctx.font = "11px IBM Plex Mono, monospace";
-  ctx.fillStyle = "rgba(255,176,0,0.9)";
-  ctx.fillText(detection ? "RASTREANDO ROSTRO" : "BUSCANDO SUJETO...", rx, Math.max(14, ry - 8));
-  ctx.fillText(`CONF: ${(70 + Math.sin(Date.now() / 400) * 20).toFixed(1)}%`, rx, ry + rh + 16);
+
+  detection.points.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+  });
+  
+  // Dibujar líneas para conectar los contornos
+  ctx.strokeStyle = "rgba(111, 66, 193, 0.6)";
+  ctx.lineWidth = 2;
+  
+  const drawPath = (start, end, close = false) => {
+    ctx.beginPath();
+    ctx.moveTo(detection.points[start].x, detection.points[start].y);
+    for (let i = start + 1; i <= end; i++) {
+      ctx.lineTo(detection.points[i].x, detection.points[i].y);
+    }
+    if (close) ctx.closePath();
+    ctx.stroke();
+  };
+
+  // Jaw
+  drawPath(0, 16);
+  // Left eyebrow
+  drawPath(17, 21);
+  // Right eyebrow
+  drawPath(22, 26);
+  // Nose
+  drawPath(27, 30);
+  drawPath(31, 35);
+  // Left eye
+  drawPath(36, 41, true);
+  // Right eye
+  drawPath(42, 47, true);
+  // Outer lip
+  drawPath(48, 59, true);
+  // Inner lip
+  drawPath(60, 67, true);
 }
 
-// Filtro 2: cyberpunk — glitch general + marco que resalta si hay rostro
+// Filtro: cyberpunk / neón
 function drawCyberpunkFilter(detection) {
   const w = overlay.width, h = overlay.height;
-  ctx.fillStyle = "rgba(255,0,150,0.06)";
-  ctx.fillRect(0, 0, w, h);
-  for (let i = 0; i < 4; i++) {
-    if (Math.random() > 0.85) {
-      const y = Math.random() * h;
-      ctx.fillStyle = `rgba(0,255,255,${0.15 + Math.random() * 0.2})`;
-      ctx.fillRect(0, y, w, 3 + Math.random() * 6);
-    }
-  }
   const b = detection ? scaledBox(detection.box) : null;
   if (b) {
-    ctx.strokeStyle = "rgba(0,255,255,0.6)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    // Dibujar gafas de neón
+    ctx.strokeStyle = "#00ffcc";
+    ctx.lineWidth = 4;
+    ctx.shadowColor = "#00ffcc";
+    ctx.shadowBlur = 15;
+    ctx.strokeRect(b.x + b.w * 0.15, b.y + b.h * 0.25, b.w * 0.7, b.h * 0.25);
+    
+    // Orejas de gato neón
+    ctx.beginPath();
+    ctx.moveTo(b.x + b.w * 0.1, b.y + b.h * 0.1);
+    ctx.lineTo(b.x + b.w * 0.3, b.y - b.h * 0.2);
+    ctx.lineTo(b.x + b.w * 0.4, b.y + b.h * 0.05);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(b.x + b.w * 0.9, b.y + b.h * 0.1);
+    ctx.lineTo(b.x + b.w * 0.7, b.y - b.h * 0.2);
+    ctx.lineTo(b.x + b.w * 0.6, b.y + b.h * 0.05);
+    ctx.stroke();
+    ctx.shadowBlur = 0; // reset
   }
-  ctx.strokeStyle = "rgba(0,255,255,0.4)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(4, 4, w - 8, h - 8);
-}
-
-// Filtro 3: alerta roja — mensaje de concientización + marco sobre el rostro
-function drawAlertFilter(detection) {
-  const w = overlay.width, h = overlay.height;
-  ctx.fillStyle = "rgba(255,59,48,0.12)";
-  ctx.fillRect(0, 0, w, h);
-  const b = detection ? scaledBox(detection.box) : null;
-  if (b) {
-    ctx.strokeStyle = "rgba(255,59,48,0.8)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-  }
-  ctx.strokeStyle = "rgba(255,59,48,0.7)";
-  ctx.lineWidth = 4;
-  ctx.strokeRect(0, 0, w, h);
-  ctx.font = "bold 13px IBM Plex Mono, monospace";
-  ctx.fillStyle = "#ff3b30";
-  ctx.textAlign = "center";
-  ctx.fillText("ESTA IMAGEN PODRÍA ESTAR SALIENDO DE TU DISPOSITIVO", w / 2, h - 18);
-  ctx.textAlign = "left";
 }
 
 // Filtro 4: "face swap" — máscara dibujada y orientada con los landmarks reales
