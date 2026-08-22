@@ -1,16 +1,10 @@
-# Despliegue como Static Site (recomendado: gratis, HTTPS automático,
-# funciona igual en PC y Android porque es la misma web responsive).
-#
-# En Render: New + -> Blueprint -> conecta tu repo -> Apply.
-# Luego ve a la pestaña "Environment" del servicio y completa:
-#   SUPABASE_URL
-#   SUPABASE_ANON_KEY
-# (los valores están vacíos aquí a propósito: nunca pongas claves reales
-# en este archivo si el repo es público).
+# render.yaml — ANOTHERFACE · UNITEC
+# Modo: Static Site (gratis, HTTPS automático, sin servidor Express necesario)
+# Build: genera public/config.js con las variables de entorno antes de publicar
 
 services:
   - type: web
-    name: unitec-panoptico-demo
+    name: anotherface-unitec
     env: static
     buildCommand: "npm install && npm run build"
     staticPublishPath: public
@@ -19,19 +13,9 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-
-# Alternativa (Web Service con Express), si prefieres ese modo:
-#  - type: web
-#    name: unitec-panoptico-demo-server
-#    env: node
-#    buildCommand: npm install && npm run build
-#    startCommand: npm start
-#    envVars:
-#      - key: SUPABASE_URL
-#        sync: false
-#      - key: SUPABASE_ANON_KEY
-#        sync: false
