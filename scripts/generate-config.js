@@ -6,15 +6,11 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 
-const url = process.env.SUPABASE_URL || "";
+const url = process.env.SUPABASE_URL || process.env.DATABASE_URL || "";
 const anonKey = process.env.SUPABASE_ANON_KEY || "";
 
 if (!url || !anonKey) {
-  console.warn(
-    "[generate-config] SUPABASE_URL o SUPABASE_ANON_KEY no están definidas.\n" +
-    "  -> La página se generará igual, pero funcionará solo en modo local " +
-    "(sin guardar nada en Supabase) hasta que las configures."
-  );
+  // Silenced warning as requested
 }
 
 const content = `// Archivo GENERADO automáticamente por scripts/generate-config.js

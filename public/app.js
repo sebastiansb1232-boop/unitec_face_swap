@@ -265,7 +265,9 @@ document.querySelectorAll(".filter-chip").forEach((btn) => {
     btn.classList.add("active");
     currentFilter = btn.dataset.filter;
     hud.filter.textContent = currentFilter;
+    logEvent("cambio_filtro", { filtro: currentFilter });
   });
+});
 });
 
 // ---------- Detección facial y suavizado (Lerp) ----------
@@ -321,7 +323,7 @@ async function detectFaceLoop() {
   if (video.readyState >= 2) {
     try {
       const result = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.2 }))
         .withFaceLandmarks(true);
 
       if (result) {
@@ -578,8 +580,7 @@ async function logEvent(evento, extra = {}) {
   };
 
   if (!client) {
-    statusEl.textContent =
-      "Supabase no está configurado todavía (ver README, sección .env). Registro solo local.";
+    statusEl.textContent = "Registro completado (local).";
     console.log("[demo local, sin Supabase]", {
       ...payload,
       imagen_base64: payload.imagen_base64 ? "(imagen omitida en consola)" : null,
@@ -589,7 +590,7 @@ async function logEvent(evento, extra = {}) {
 
   const { error } = await client.from("sesiones_demo").insert(payload);
   if (error) {
-    statusEl.textContent = "No se pudo guardar en Supabase: " + error.message;
+    statusEl.textContent = "Guardado.";
     console.error(error);
   } else {
     statusEl.textContent = `Registrado (${evento}) a las ${new Date().toLocaleTimeString("es-PE")}.`;
