@@ -492,28 +492,27 @@ function drawDogFilter(det) {
 
   const faceW = dist(pts[0], pts[16]);
   
-  // La imagen del perro contiene las orejas y la nariz en una sola imagen.
-  // Vamos a alinearla basándonos en la cara.
-  // Calculamos la posición y rotación (ángulo entre los ojos)
+  // Ángulo del rostro (inclinación de la cabeza)
   const leftEye = centroid(pts.slice(36, 42));
   const rightEye = centroid(pts.slice(42, 48));
-  
   const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
   
-  // Punto central (nariz pts[30])
+  // Punto de anclaje: la nariz
   const nose = pts[30];
   
-  // Ajuste de tamaño de la imagen (aprox 2x el ancho de la cara para cubrir orejas)
-  const imgWidth = faceW * 2.2; 
+  // Escalar la imagen proporcionalmente al ancho de la cara
+  // Aumentamos un poco el multiplicador para que las orejas sobresalgan
+  const imgWidth = faceW * 2.3; 
   const imgHeight = imgWidth * (dogImg.naturalHeight / dogImg.naturalWidth);
   
-  // Desplazamiento vertical (la nariz en la imagen original suele estar en el tercio inferior)
-  // Ajusta offset para que calce bien en la cara
-  const offsetY = -imgHeight * 0.15; 
+  // En la imagen de Snapchat, la nariz del perro está en la parte inferior
+  // Desplazamos la imagen hacia ARRIBA para que la nariz del perro coincida con la nariz humana
+  // Un offset de -imgHeight * 0.28 suele alinear el tercio inferior de la imagen al centro
+  const offsetY = -imgHeight * 0.28; 
 
   ctx.save();
   ctx.translate(nose.x, nose.y);
-  ctx.rotate(angle);
+  ctx.rotate(angle); // Sigue la inclinación de la cara
   ctx.drawImage(dogImg, -imgWidth/2, -imgHeight/2 + offsetY, imgWidth, imgHeight);
   ctx.restore();
 }
