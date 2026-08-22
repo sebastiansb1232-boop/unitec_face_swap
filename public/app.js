@@ -495,7 +495,12 @@ function drawDogFilter(det) {
   // Ángulo del rostro (inclinación de la cabeza)
   const leftEye = centroid(pts.slice(36, 42));
   const rightEye = centroid(pts.slice(42, 48));
-  const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+  
+  // Siempre calculamos el ángulo de izquierda a derecha en la pantalla 
+  // para evitar que la imagen gire 180 grados si los puntos están espejados
+  const screenLeft = leftEye.x < rightEye.x ? leftEye : rightEye;
+  const screenRight = leftEye.x < rightEye.x ? rightEye : leftEye;
+  const angle = Math.atan2(screenRight.y - screenLeft.y, screenRight.x - screenLeft.x);
   
   // Punto de anclaje: la nariz
   const nose = pts[30];
