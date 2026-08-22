@@ -356,6 +356,27 @@ main {
   font-family: var(--mono);
 }
 
+/* ── CAPTURE RESULT / DOWNLOAD ── */
+.capture-result {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--panel-2);
+  box-shadow: 0 0 24px rgba(255,42,109,0.12);
+}
+.capture-preview {
+  width: 100%; display: block;
+  border-bottom: 1px solid var(--line);
+}
+.capture-actions {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; flex-wrap: wrap;
+}
+.capture-upload-status {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--muted);
+}
+
 /* ── HUD ── */
 .studio-hud {
   background: var(--panel); border: 1px solid var(--line);

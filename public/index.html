@@ -172,6 +172,9 @@
         <button class="filter-chip" data-filter="sonrisa">
           <span class="filter-icon">😄</span> Detector Sonrisa
         </button>
+        <button class="filter-chip" data-filter="perro">
+          <span class="filter-icon">🐶</span> Perro
+        </button>
       </div>
 
       <div class="studio-actions">
@@ -179,8 +182,19 @@
         <button id="switch-camera-btn" class="btn btn-ghost">↺ Cambiar cámara</button>
         <button id="stop-btn" class="btn btn-ghost">✕ Apagar</button>
       </div>
+
+      <!-- Área de descarga — aparece tras capturar -->
+      <div id="capture-result" class="capture-result hidden">
+        <img id="capture-preview" class="capture-preview" alt="Captura" />
+        <div class="capture-actions">
+          <a id="download-link" class="btn btn-primary" download="anotherface-captura.jpg">⬇ Descargar foto</a>
+          <span id="capture-upload-status" class="capture-upload-status"></span>
+        </div>
+      </div>
+
       <p class="studio-status" id="studio-status"></p>
     </div>
+
 
     <aside class="studio-hud">
       <h3>✦ Info de sesión</h3>
