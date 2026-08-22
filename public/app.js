@@ -410,83 +410,7 @@ function drawSilhouetteFilter(det) {
   });
 }
 
-// ── Ojos de Fuego ──
-function drawFireEyesFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts = det.points;
-  const lPts = pts.slice(36, 42), rPts = pts.slice(42, 48);
-  const eyeW = (dist(lPts[0], lPts[3]) + dist(rPts[0], rPts[3])) / 2;
-  function flame(cx, cy, w, t) {
-    const r = w * 0.42;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, "rgba(255,255,100,1)"); g.addColorStop(0.5, "rgba(255,80,0,0.95)"); g.addColorStop(1, "rgba(200,0,0,0.5)");
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.fillStyle = g; ctx.shadowColor = "#ff4400"; ctx.shadowBlur = 28; ctx.fill();
-    for (let i = 0; i < 16; i++) {
-      const a = (Math.PI*2*i)/16, len = r + w*(0.7+Math.sin(t*0.008+i*1.2)*0.4+Math.random()*0.3);
-      const bias = Math.sin(a) < 0 ? 2.2 : 0.3;
-      ctx.beginPath();
-      ctx.moveTo(cx+Math.cos(a-0.25)*r, cy+Math.sin(a-0.25)*r);
-      ctx.lineTo(cx+Math.cos(a)*len,    cy+Math.sin(a)*len*bias-w*0.5);
-      ctx.lineTo(cx+Math.cos(a+0.25)*r, cy+Math.sin(a+0.25)*r);
-      ctx.fillStyle = i%2 ? "rgba(255,200,0,0.6)" : "rgba(255,100,0,0.75)"; ctx.fill();
-    }
-    ctx.shadowBlur = 0;
-  }
-  flame(centroid(lPts).x, centroid(lPts).y, eyeW, ts);
-  flame(centroid(rPts).x, centroid(rPts).y, eyeW, ts+700);
-}
-
-// ── Cyber ──
-function drawCyberFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts = det.points;
-  ctx.strokeStyle = `rgba(0,255,150,${0.3+0.1*Math.sin(ts*0.003)})`; ctx.lineWidth = 0.8;
-  const conn = [
-    [0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,16],
-    [17,18],[18,19],[19,20],[20,21],[22,23],[23,24],[24,25],[25,26],
-    [36,37],[37,38],[38,39],[39,40],[40,41],[41,36],
-    [42,43],[43,44],[44,45],[45,46],[46,47],[47,42],
-    [48,49],[49,50],[50,51],[51,52],[52,53],[53,54],[54,55],[55,56],[56,57],[57,58],[58,59],[59,48],
-    [27,21],[27,26],[33,48],[33,54],[36,0],[45,16],[30,35],[17,0],[26,16],
-  ];
-  conn.forEach(([a,b]) => { ctx.beginPath(); ctx.moveTo(pts[a].x,pts[a].y); ctx.lineTo(pts[b].x,pts[b].y); ctx.stroke(); });
-  [0,4,8,12,16,19,24,27,30,33,36,39,42,45,48,51,54,57].forEach((i,idx) => {
-    ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 3, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(0,255,150,${0.5+0.5*Math.sin(ts*0.005+idx)})`;
-    ctx.shadowColor = "#00ff96"; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
-  });
-  const top = pts[27].y - 20, bot = pts[8].y + 10;
-  const scanY = top + (Math.sin(ts*0.0018)*0.5+0.5)*(bot-top);
-  const lx = Math.min(pts[0].x,pts[16].x)-10, rx = Math.max(pts[0].x,pts[16].x)+10;
-  const sg = ctx.createLinearGradient(lx,scanY,rx,scanY);
-  sg.addColorStop(0,"rgba(0,255,150,0)"); sg.addColorStop(0.5,"rgba(0,255,150,0.7)"); sg.addColorStop(1,"rgba(0,255,150,0)");
-  ctx.beginPath(); ctx.moveTo(lx,scanY); ctx.lineTo(rx,scanY);
-  ctx.strokeStyle = sg; ctx.lineWidth = 2; ctx.stroke();
-}
-
-// ── Neón ──
-function drawNeonFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts = det.points, glow = 2+Math.sin(ts*0.004);
-  const R = [
-    {s:0, e:16,c:"#ff2a6d",cl:false},{s:17,e:21,c:"#00e5ff",cl:false},{s:22,e:26,c:"#00e5ff",cl:false},
-    {s:27,e:35,c:"#7c3aed",cl:false},{s:36,e:41,c:"#ffcc00",cl:true },{s:42,e:47,c:"#ffcc00",cl:true },
-    {s:48,e:59,c:"#ff2a6d",cl:true },{s:60,e:67,c:"#ff6b35",cl:true },
-  ];
-  R.forEach(({s,e,c,cl}) => {
-    ctx.shadowColor=c; ctx.shadowBlur=18+glow*4; ctx.strokeStyle=c; ctx.lineWidth=2+glow*0.25;
-    drawSpline(pts.slice(s,e+1),cl); ctx.stroke();
-  });
-  [17,19,21,22,24,26,36,39,42,45,48,54].forEach((i,idx) => {
-    const c = ["#ff2a6d","#00e5ff","#7c3aed","#ffcc00"][idx%4];
-    ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,2.5,0,Math.PI*2);
-    ctx.fillStyle=c; ctx.shadowColor=c; ctx.shadowBlur=12; ctx.fill();
-  });
-  ctx.shadowBlur = 0;
-}
-
-// ── Deformar ──
+// ── Deformar (Cara Graciosa) ──
 function drawDeformFilter(det, ts) {
   if (!det || det.points.length < 68) return;
   const pts = det.points, W = overlay.width, H = overlay.height;
@@ -510,236 +434,88 @@ function drawDeformFilter(det, ts) {
   });
 }
 
-// ── Lentes Nerd ──
-function drawNerdGlassesFilter(det) {
+// ── Remolino (Swirl) ──
+function drawRemolinoFilter(det, ts) {
   if (!det || det.points.length < 68) return;
-  const pts=det.points, lPts=pts.slice(36,42), rPts=pts.slice(42,48);
-  const lC=centroid(lPts), rC=centroid(rPts);
-  const lR=dist(lPts[0],lPts[3])*0.75, rR=dist(rPts[0],rPts[3])*0.75;
-  const bridge={x:(lC.x+rC.x)/2,y:(lC.y+rC.y)/2};
-  ctx.strokeStyle="#6b3310"; ctx.lineWidth=4; ctx.shadowColor="rgba(0,0,0,0.5)"; ctx.shadowBlur=6;
-  ctx.beginPath(); ctx.arc(lC.x,lC.y,lR,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.arc(rC.x,rC.y,rR,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(lC.x+lR,lC.y); ctx.quadraticCurveTo(bridge.x,bridge.y-lR*0.5,rC.x-rR,rC.y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(lC.x-lR,lC.y); ctx.lineTo(pts[0].x,pts[0].y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(rC.x+rR,rC.y); ctx.lineTo(pts[16].x,pts[16].y); ctx.stroke();
-  ctx.strokeStyle="rgba(255,255,255,0.35)"; ctx.lineWidth=2; ctx.shadowBlur=0;
-  ctx.beginPath(); ctx.arc(lC.x-lR*0.2,lC.y-lR*0.2,lR*0.3,-Math.PI*0.85,-Math.PI*0.15); ctx.stroke();
-  ctx.beginPath(); ctx.arc(rC.x-rR*0.2,rC.y-rR*0.2,rR*0.3,-Math.PI*0.85,-Math.PI*0.15); ctx.stroke();
-  const mC=centroid(pts.slice(48,60)), mW=dist(pts[48],pts[54])*0.58;
-  ctx.fillStyle="#4a2208"; ctx.shadowBlur=0;
-  ctx.beginPath(); ctx.moveTo(mC.x-mW,mC.y-4);
-  ctx.bezierCurveTo(mC.x-mW*0.5,mC.y+14,mC.x+mW*0.5,mC.y+14,mC.x+mW,mC.y-4); ctx.fill();
-}
+  const pts = det.points, W = overlay.width, H = overlay.height;
+  const nose = pts[30];
+  const faceW = dist(pts[0],pts[16]) * 0.7; // Radio del remolino
+  
+  const tmp = document.createElement("canvas"); tmp.width=W; tmp.height=H;
+  const tc = tmp.getContext("2d");
+  tc.save(); if(facingMode==="user"){tc.translate(W,0);tc.scale(-1,1);} tc.drawImage(video,0,0,W,H); tc.restore();
+  
+  // Dibujamos el frame normal en el overlay
+  ctx.drawImage(tmp, 0, 0);
 
-// ── Análisis de Ingeniería ──
-function drawAnalysisFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts=det.points, smile=faceAnalysis.smile, W=overlay.width;
-  const lx=Math.min(pts[0].x,pts[16].x)-14, rx=Math.max(pts[0].x,pts[16].x)+14;
-  const ty=Math.min(pts[19].y,pts[24].y)-24, by=pts[8].y+16;
-  ctx.strokeStyle="rgba(0,255,200,0.85)"; ctx.lineWidth=1.5;
-  ctx.setLineDash(ts%80<40?[6,4]:[3,7]); ctx.strokeRect(lx,ty,rx-lx,by-ty); ctx.setLineDash([]);
-  const cL=16; ctx.strokeStyle="#00ffc8"; ctx.lineWidth=3;
-  [[lx,ty,1,1],[rx,ty,-1,1],[lx,by,1,-1],[rx,by,-1,-1]].forEach(([cx,cy,dx,dy])=>{
-    ctx.beginPath(); ctx.moveTo(cx,cy+dy*cL); ctx.lineTo(cx,cy); ctx.lineTo(cx+dx*cL,cy); ctx.stroke();
-  });
-  const nose=pts[30];
-  ctx.strokeStyle="rgba(0,255,200,0.2)"; ctx.lineWidth=1; ctx.setLineDash([4,4]);
-  ctx.beginPath(); ctx.moveTo(nose.x,ty); ctx.lineTo(nose.x,by); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(lx,nose.y); ctx.lineTo(rx,nose.y); ctx.stroke(); ctx.setLineDash([]);
-  const smilePct=Math.round(smile*100), conf=Math.round((det.score||0)*100);
-  const mood=smile>0.35?"ALEGRE":smile>0.15?"NEUTRAL":"SERIO";
-  const brows=faceAnalysis.eyebrow>0.14?"ALZADAS":"NORMALES";
-  const lines=[
-    ["◈ ANÁLISIS FACIAL","#ffcc00"],["──────────────────","rgba(0,255,200,0.3)"],
-    [`Confianza:  ${conf}%`,"#00ffc8"],[`Puntos:     68 + interpolados`,"#00ffc8"],
-    ["──────────────────","rgba(0,255,200,0.3)"],[`Sonrisa:    ${smilePct}%`,"#00ffc8"],
-    [`Emoción:    ${mood}`,"#00ffc8"],[`Cejas:      ${brows}`,"#00ffc8"],
-    ["──────────────────","rgba(0,255,200,0.3)"],[`Simetría:   ${Math.round(80+Math.sin(ts*0.001)*6)}%`,"#00ffc8"],
-  ];
-  const px=rx+12, py=ty;
-  if(px+188<W){
-    ctx.fillStyle="rgba(0,18,28,0.8)"; ctx.fillRect(px,py,188,lines.length*16+12);
-    ctx.font="bold 11px 'IBM Plex Mono',monospace";
-    lines.forEach(([txt,col],i)=>{
-      ctx.fillStyle=col; ctx.shadowColor="#00ffc8"; ctx.shadowBlur=col==="#00ffc8"?4:0;
-      ctx.fillText(txt,px+7,py+15+i*16);
-    }); ctx.shadowBlur=0;
-  }
-  const barX=lx,barY=by+14,barW=rx-lx;
-  ctx.fillStyle="rgba(0,18,28,0.7)"; ctx.fillRect(barX,barY,barW,12);
-  const bc=smile>0.4?"#00ff88":smile>0.2?"#ffcc00":"#ff4466";
-  ctx.fillStyle=bc; ctx.shadowColor=bc; ctx.shadowBlur=8; ctx.fillRect(barX,barY,barW*Math.min(1,smile),12);
-  ctx.strokeStyle="rgba(0,255,200,0.4)"; ctx.lineWidth=1; ctx.shadowBlur=0; ctx.strokeRect(barX,barY,barW,12);
-  ctx.fillStyle="#fff"; ctx.font="9px monospace"; ctx.fillText(`SONRISA ${smilePct}%`,barX+4,barY+10);
-  [0,4,8,12,16,19,24,27,30,33,36,39,42,45,48,54].forEach((i)=>{
-    ctx.beginPath(); ctx.arc(pts[i].x,pts[i].y,3,0,Math.PI*2);
-    ctx.fillStyle="#00ffc8"; ctx.shadowColor="#00ffc8"; ctx.shadowBlur=8; ctx.fill();
-  }); ctx.shadowBlur=0;
-}
+  // Intensidad del remolino que varía con el tiempo
+  const swirlAngle = 2.0 + Math.sin(ts * 0.002) * 1.5; 
+  
+  const GRID = 24; 
+  const r = faceW;
+  const x0 = nose.x - r, y0 = nose.y - r;
+  const gw = (2*r)/GRID, gh = (2*r)/GRID;
 
-// ── Detector Sonrisa ──
-function drawSmileFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts=det.points, smile=faceAnalysis.smile, faceH=dist(pts[27],pts[8]), noseX=pts[27].x;
-  const emoji=smile>0.4?"😄":smile>0.25?"🙂":smile>0.1?"😐":"😑";
-  ctx.font=`${Math.round(faceH*0.42)}px serif`; ctx.textAlign="center";
-  ctx.fillText(emoji,noseX,Math.min(pts[19].y,pts[24].y)-faceH*0.15);
-  const mC=centroid(pts.slice(48,60)), mW=dist(pts[48],pts[54])*0.58;
-  const arcH=mW*smile*1.6, color=smile>0.35?"#00ff88":smile>0.15?"#ffcc00":"#ff4466";
-  ctx.strokeStyle=color; ctx.lineWidth=3+smile*4; ctx.shadowColor=color; ctx.shadowBlur=12+smile*20;
-  ctx.beginPath(); ctx.moveTo(mC.x-mW,mC.y); ctx.quadraticCurveTo(mC.x,mC.y+arcH,mC.x+mW,mC.y); ctx.stroke();
-  const label=smile>0.4?"¡ALEGRE! 🎉":smile>0.25?"Sonriente 😊":smile>0.1?"Neutral":"Serio 😐";
-  ctx.fillStyle=color; ctx.font="bold 17px 'Space Grotesk',sans-serif"; ctx.shadowBlur=8;
-  ctx.fillText(label,noseX,pts[8].y+32);
-  if(smile>0.45){
-    const cols=["#ff2a6d","#00e5ff","#ffcc00","#7c3aed","#00ff88"];
-    for(let i=0;i<10;i++){
-      const rx2=noseX+Math.sin(ts*0.005+i*0.95)*dist(pts[0],pts[16])*0.75;
-      const ry2=pts[27].y-faceH*(0.4+((ts*0.0004+i*0.12)%0.65));
-      ctx.fillStyle=cols[i%cols.length]; ctx.shadowBlur=0; ctx.fillRect(rx2,ry2,5,5);
+  // Sobre-dibujar la zona de la cara aplicando la distorsión polar
+  for(let gy=0; gy<GRID; gy++) {
+    for(let gx=0; gx<GRID; gx++){
+      const sx = x0 + gx*gw, sy = y0 + gy*gh;
+      const dx = (sx + gw/2) - nose.x;
+      const dy = (sy + gh/2) - nose.y;
+      const distance = Math.hypot(dx, dy);
+      
+      if (distance < r) {
+        // Calcular el ángulo de distorsión basado en la distancia
+        const percent = (r - distance) / r;
+        const theta = percent * percent * swirlAngle;
+        
+        const sin = Math.sin(theta);
+        const cos = Math.cos(theta);
+        
+        const srcX = nose.x + (dx * cos - dy * sin);
+        const srcY = nose.y + (dx * sin + dy * cos);
+        
+        ctx.drawImage(tmp, Math.max(0, srcX - gw/2), Math.max(0, srcY - gh/2), gw, gh, sx, sy, gw, gh);
+      }
     }
   }
-  ctx.textAlign="left"; ctx.shadowBlur=0;
 }
 
-// ── FILTRO PERRO ── (estilo Snapchat, dibujado con canvas)
+// ── FILTRO PERRO (Imagen adjunta) ──
+const dogImg = new Image();
+dogImg.src = "assets/dog_filter.png"; // Cargada desde assets
+
 function drawDogFilter(det) {
   if (!det || det.points.length < 68) return;
-  const pts    = det.points;
-  const nose   = pts[30];                      // punta de la nariz
-  const faceW  = dist(pts[0], pts[16]);
-  const faceH  = dist(pts[27], pts[8]);
+  const pts = det.points;
+  if (!dogImg.complete || dogImg.naturalWidth === 0) return;
 
-  // Colores del filtro perro
-  const BROWN  = "#a06030";
-  const DARK   = "#6b3a10";
-  const LIGHT  = "#c8905a";
-  const PINK   = "#e09080";
+  const faceW = dist(pts[0], pts[16]);
+  
+  // La imagen del perro contiene las orejas y la nariz en una sola imagen.
+  // Vamos a alinearla basándonos en la cara.
+  // Calculamos la posición y rotación (ángulo entre los ojos)
+  const leftEye = centroid(pts.slice(36, 42));
+  const rightEye = centroid(pts.slice(42, 48));
+  
+  const angle = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x);
+  
+  // Punto central (nariz pts[30])
+  const nose = pts[30];
+  
+  // Ajuste de tamaño de la imagen (aprox 2x el ancho de la cara para cubrir orejas)
+  const imgWidth = faceW * 2.2; 
+  const imgHeight = imgWidth * (dogImg.naturalHeight / dogImg.naturalWidth);
+  
+  // Desplazamiento vertical (la nariz en la imagen original suele estar en el tercio inferior)
+  // Ajusta offset para que calce bien en la cara
+  const offsetY = -imgHeight * 0.15; 
 
-  // ── Orejas (ancladas a las cejas externas + escaladas con el rostro) ──
-  const earW = faceW  * 0.32;
-  const earH = faceH  * 0.60;
-
-  function drawEar(anchorX, anchorY, dir) { // dir: -1 izquierda, +1 derecha
-    // Oreja externa (marrón)
-    ctx.fillStyle = BROWN;
-    ctx.beginPath();
-    ctx.moveTo(anchorX, anchorY);
-    ctx.bezierCurveTo(
-      anchorX + dir * earW * 0.05, anchorY - earH * 0.25,
-      anchorX + dir * earW * 0.55, anchorY - earH * 0.85,
-      anchorX + dir * earW * 0.45, anchorY - earH * 1.15
-    );
-    ctx.bezierCurveTo(
-      anchorX + dir * earW * 0.30, anchorY - earH * 1.35,
-      anchorX - dir * earW * 0.15, anchorY - earH * 1.25,
-      anchorX - dir * earW * 0.10, anchorY - earH * 0.95
-    );
-    ctx.bezierCurveTo(
-      anchorX - dir * earW * 0.30, anchorY - earH * 0.55,
-      anchorX - dir * earW * 0.10, anchorY - earH * 0.10,
-      anchorX, anchorY
-    );
-    ctx.fill();
-
-    // Interior de la oreja (más claro)
-    ctx.fillStyle = LIGHT;
-    ctx.beginPath();
-    ctx.moveTo(anchorX + dir * earW * 0.04, anchorY - earH * 0.10);
-    ctx.bezierCurveTo(
-      anchorX + dir * earW * 0.20, anchorY - earH * 0.30,
-      anchorX + dir * earW * 0.40, anchorY - earH * 0.75,
-      anchorX + dir * earW * 0.32, anchorY - earH * 0.98
-    );
-    ctx.bezierCurveTo(
-      anchorX + dir * earW * 0.18, anchorY - earH * 1.12,
-      anchorX - dir * earW * 0.08, anchorY - earH * 1.05,
-      anchorX - dir * earW * 0.05, anchorY - earH * 0.78
-    );
-    ctx.bezierCurveTo(
-      anchorX - dir * earW * 0.20, anchorY - earH * 0.45,
-      anchorX - dir * earW * 0.04, anchorY - earH * 0.12,
-      anchorX + dir * earW * 0.04, anchorY - earH * 0.10
-    );
-    ctx.fill();
-
-    // Interior rosado
-    ctx.fillStyle = PINK;
-    ctx.globalAlpha = 0.55;
-    ctx.beginPath();
-    ctx.moveTo(anchorX + dir * earW * 0.06, anchorY - earH * 0.18);
-    ctx.bezierCurveTo(
-      anchorX + dir * earW * 0.18, anchorY - earH * 0.35,
-      anchorX + dir * earW * 0.30, anchorY - earH * 0.68,
-      anchorX + dir * earW * 0.22, anchorY - earH * 0.88
-    );
-    ctx.bezierCurveTo(
-      anchorX + dir * earW * 0.14, anchorY - earH * 1.02,
-      anchorX - dir * earW * 0.04, anchorY - earH * 0.95,
-      anchorX - dir * earW * 0.02, anchorY - earH * 0.70
-    );
-    ctx.bezierCurveTo(
-      anchorX - dir * earW * 0.14, anchorY - earH * 0.40,
-      anchorX - dir * earW * 0.02, anchorY - earH * 0.18,
-      anchorX + dir * earW * 0.06, anchorY - earH * 0.18
-    );
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  // Anclar orejas a los puntos de la ceja exterior de cada lado
-  // pts[17] = inicio ceja izq (en pantalla) → oreja izquierda (dir -1)
-  // pts[26] = fin ceja der    (en pantalla) → oreja derecha  (dir +1)
-  const lEarAnchorX = pts[17].x - faceW * 0.02;
-  const lEarAnchorY = pts[17].y + faceH * 0.02;
-  const rEarAnchorX = pts[26].x + faceW * 0.02;
-  const rEarAnchorY = pts[26].y + faceH * 0.02;
-
-  drawEar(lEarAnchorX, lEarAnchorY, -1);
-  drawEar(rEarAnchorX, rEarAnchorY, +1);
-
-  // ── Nariz de perro (anclada a pts[30]) ──
-  const nR = faceW * 0.13; // radio de la nariz
-  const nY = nose.y + nR * 0.2;
-
-  // Cuerpo principal de la nariz
-  ctx.fillStyle = DARK;
-  ctx.beginPath();
-  ctx.ellipse(nose.x, nY, nR, nR * 0.65, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Surco central (línea vertical)
-  ctx.strokeStyle = "#3a1508"; ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(nose.x, nY - nR * 0.25);
-  ctx.lineTo(nose.x, nY + nR * 0.65);
-  ctx.stroke();
-
-  // Fosas nasales
-  ctx.fillStyle = "#2a0e04";
-  ctx.beginPath(); ctx.ellipse(nose.x - nR*0.35, nY + nR*0.12, nR*0.26, nR*0.20, -0.25, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(nose.x + nR*0.35, nY + nR*0.12, nR*0.26, nR*0.20,  0.25, 0, Math.PI*2); ctx.fill();
-
-  // Brillo de la nariz
-  ctx.fillStyle = "rgba(255,255,255,0.32)";
-  ctx.beginPath(); ctx.ellipse(nose.x - nR*0.18, nY - nR*0.18, nR*0.22, nR*0.14, -0.4, 0, Math.PI*2); ctx.fill();
-
-  // ── Manchas en las mejillas (puntos de bigote de perro) ──
-  ctx.fillStyle = BROWN;
-  // Mejilla izquierda: cerca de pts[1], pts[2], pts[3]
-  [[pts[2].x - 4, pts[2].y - 2],
-   [pts[2].x + 6, pts[2].y + 6],
-   [pts[3].x - 2, pts[3].y - 4]].forEach(([fx, fy]) => {
-    ctx.beginPath(); ctx.arc(fx, fy, 3.5, 0, Math.PI*2); ctx.fill();
-  });
-  // Mejilla derecha: cerca de pts[14], pts[13], pts[12]
-  [[pts[13].x + 4, pts[13].y - 2],
-   [pts[13].x - 6, pts[13].y + 6],
-   [pts[12].x + 2, pts[12].y - 4]].forEach(([fx, fy]) => {
-    ctx.beginPath(); ctx.arc(fx, fy, 3.5, 0, Math.PI*2); ctx.fill();
-  });
+  ctx.save();
+  ctx.translate(nose.x, nose.y);
+  ctx.rotate(angle);
+  ctx.drawImage(dogImg, -imgWidth/2, -imgHeight/2 + offsetY, imgWidth, imgHeight);
+  ctx.restore();
 }
 
 // ── RENDER LOOP ──
@@ -753,13 +529,8 @@ function renderLoop(ts) {
   if (smoothedDetection) {
     switch (currentFilter) {
       case "silueta":  drawSilhouetteFilter(smoothedDetection);       break;
-      case "fuego":    drawFireEyesFilter(smoothedDetection, ts);     break;
-      case "cyber":    drawCyberFilter(smoothedDetection, ts);        break;
-      case "neon":     drawNeonFilter(smoothedDetection, ts);         break;
       case "deform":   drawDeformFilter(smoothedDetection, ts);       break;
-      case "nerd":     drawNerdGlassesFilter(smoothedDetection);      break;
-      case "analisis": drawAnalysisFilter(smoothedDetection, ts);     break;
-      case "sonrisa":  drawSmileFilter(smoothedDetection, ts);        break;
+      case "remolino": drawRemolinoFilter(smoothedDetection, ts);     break;
       case "perro":    drawDogFilter(smoothedDetection);              break;
       default: break;
     }
