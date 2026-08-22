@@ -506,18 +506,20 @@ function drawDogFilter(det) {
   const nose = pts[30];
   
   // Escalar la imagen proporcionalmente al ancho de la cara
-  // Aumentamos un poco el multiplicador para que las orejas sobresalgan
-  const imgWidth = faceW * 2.3; 
+  // Aumentamos el multiplicador a 2.8 para que las orejas lleguen más arriba (sobre la cabeza)
+  const imgWidth = faceW * 2.8; 
   const imgHeight = imgWidth * (dogImg.naturalHeight / dogImg.naturalWidth);
   
-  // En la imagen de Snapchat, la nariz del perro está en la parte inferior
-  // Desplazamos la imagen hacia ARRIBA para que la nariz del perro coincida con la nariz humana
-  // Un offset de -imgHeight * 0.28 suele alinear el tercio inferior de la imagen al centro
-  const offsetY = -imgHeight * 0.28; 
+  // Ajuste preciso para que la nariz del perro (que está abajo en la imagen) 
+  // quede anclada a tu nariz, empujando las orejas hacia arriba de tu frente
+  const offsetY = -imgHeight * 0.32; 
 
   ctx.save();
   ctx.translate(nose.x, nose.y);
   ctx.rotate(angle); // Sigue la inclinación de la cara
+  // Para mantener calidad, evitamos pixelado brusco
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(dogImg, -imgWidth/2, -imgHeight/2 + offsetY, imgWidth, imgHeight);
   ctx.restore();
 }
