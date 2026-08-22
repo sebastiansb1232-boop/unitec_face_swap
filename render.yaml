@@ -1,13 +1,14 @@
 # render.yaml — ANOTHERFACE · UNITEC
-# Modo: Static Site (gratis, HTTPS automático, sin servidor Express necesario)
-# Build: genera public/config.js con las variables de entorno antes de publicar
+# Tipo: Web Service (Node.js con Express)
+# El servidor sirve /config.js dinámicamente con las vars de entorno reales.
+# NO se necesita paso de build para generar config.js.
 
 services:
   - type: web
     name: anotherface-unitec
-    env: static
-    buildCommand: "npm install && npm run build"
-    staticPublishPath: public
+    env: node
+    buildCommand: "npm install"
+    startCommand: "node server.js"
     envVars:
       - key: SUPABASE_URL
         sync: false
@@ -15,7 +16,3 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
