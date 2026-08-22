@@ -1,10 +1,8 @@
-// Servidor estático mínimo. Solo es necesario si despliegas esto en Render
-// como "Web Service" en vez de "Static Site". Para "Static Site" no
-// necesitas este archivo en absoluto: Render sirve /public directamente.
+require("dotenv").config(); // Lee .env localmente; en Render lo inyecta el panel automáticamente
 const express = require("express");
-const path = require("path");
+const path    = require("path");
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -14,5 +12,5 @@ app.get("*", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`PANÓPTICO corriendo en el puerto ${PORT}`);
+  console.log(`ANOTHERFACE corriendo en el puerto ${PORT}`);
 });
