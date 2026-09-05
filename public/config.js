@@ -1,5 +1,2 @@
-// Archivo GENERADO automáticamente — no editar a mano.
-window.SUPABASE_CONFIG = {
-  url: "https://TU-PROYECTO.supabase.co",
-  anonKey: "TU-ANON-KEY-PUBLICA",
-};
+// Compatibilidad: las claves de Supabase permanecen en el servidor.
+window.SUPABASE_CONFIG = {};

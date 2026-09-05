@@ -1,158 +1,19 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Panel - ANOTHERFACE</title>
-  <link rel="stylesheet" href="styles.css">
-  <style>
-    body { background-color: var(--bg); padding: 40px 20px; font-family: 'Space Grotesk', sans-serif; color: var(--text); }
-    .admin-container { max-width: 900px; margin: 0 auto; }
-    h1 { margin-bottom: 30px; text-align: center; color: var(--accent); }
-    .login-box { max-width: 400px; margin: 0 auto; background: var(--panel); padding: 30px; border-radius: 12px; border: 1px solid var(--line); }
-    .login-box input { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: white; }
-    .login-box button { width: 100%; }
-    .data-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9rem; }
-    .data-table th, .data-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--line); }
-    .data-table th { color: var(--accent); background: var(--panel); }
-    .data-table img { max-width: 150px; border-radius: 8px; }
-    .hidden { display: none; }
-    .logout-btn { float: right; margin-bottom: 20px; }
-  </style>
-</head>
-<body>
-
-<div class="admin-container">
-  <h1>Panel de Administración</h1>
-
-  <!-- Login Admin -->
-  <div id="admin-login" class="login-box">
-    <h3>Acceso Restringido</h3>
-    <form id="admin-form">
-      <input type="email" id="admin-email" placeholder="Correo electrónico" required>
-      <input type="password" id="admin-pwd" placeholder="Contraseña" required>
-      <button type="submit" class="btn btn-primary">Entrar</button>
-    </form>
-    <p id="admin-error" style="color: #ff4466; margin-top: 10px; display: none;">Credenciales incorrectas</p>
-  </div>
-
-  <!-- Dashboard Admin -->
-  <div id="admin-dashboard" class="hidden">
-    <button id="logout-btn" class="btn btn-ghost logout-btn">Cerrar Sesión</button>
-    <p>Mostrando los registros capturados (se eliminan automáticamente después de 4 horas).</p>
-    
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Fecha / Hora</th>
-          <th>Usuario (Simulado)</th>
-          <th>Contraseña (Simulada)</th>
-          <th>Filtro</th>
-          <th>Foto Capturada</th>
-          <th>Navegador</th>
-        </tr>
-      </thead>
-      <tbody id="data-body">
-        <!-- Datos cargados dinámicamente -->
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<script>
-  const loginSection = document.getElementById("admin-login");
-  const dashSection  = document.getElementById("admin-dashboard");
-  const loginForm    = document.getElementById("admin-form");
-  const dataBody     = document.getElementById("data-body");
-
-  // Check if already logged in
-  if (localStorage.getItem("admin_token")) {
-    showDashboard();
-  }
-
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = document.getElementById("admin-email").value;
-    const password = document.getElementById("admin-pwd").value;
-
-    const res = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-
-    const data = await res.json();
-    if (data.success) {
-      localStorage.setItem("admin_token", data.token);
-      document.getElementById("admin-error").style.display = "none";
-      showDashboard();
-    } else {
-      document.getElementById("admin-error").style.display = "block";
-    }
-  });
-
-  document.getElementById("logout-btn").addEventListener("click", () => {
-    localStorage.removeItem("admin_token");
-    dashSection.classList.add("hidden");
-    loginSection.classList.remove("hidden");
-    loginForm.reset();
-  });
-
-  async function showDashboard() {
-    loginSection.classList.add("hidden");
-    dashSection.classList.remove("hidden");
-    
-    const token = localStorage.getItem("admin_token");
-    const res = await fetch("/api/admin/data", {
-      headers: { "Authorization": "Bearer " + token }
-    });
-    
-    if (res.status === 403 || res.status === 401) {
-      localStorage.removeItem("admin_token");
-      dashSection.classList.add("hidden");
-      loginSection.classList.remove("hidden");
-      return;
-    }
-
-    const json = await res.json();
-    if (json.success) {
-      renderTable(json.data);
-    } else {
-      dataBody.innerHTML = `<tr><td colspan="6">Error cargando datos: ${json.error}</td></tr>`;
-    }
-  }
-
-  function renderTable(rows) {
-    if (!rows || rows.length === 0) {
-      dataBody.innerHTML = `<tr><td colspan="6" style="text-align:center;">No hay registros recientes.</td></tr>`;
-      return;
-    }
-
-    dataBody.innerHTML = rows.map(r => {
-      const date = new Date(r.creado_en).toLocaleString("es-HN");
-      let photoHtml = "<i>Sin foto</i>";
-      
-      // Mostrar la imagen desde Storage si existe
-      if (r.imagen_url) {
-        photoHtml = `<a href="${r.imagen_url}" target="_blank"><img src="${r.imagen_url}" alt="Captura"></a>`;
-      } 
-      // Si no hay URL pero hay base64, mostrar el base64
-      else if (r.imagen_base64) {
-        photoHtml = `<img src="${r.imagen_base64}" alt="Captura">`;
-      }
-
-      return `
-        <tr>
-          <td>${date}</td>
-          <td>${r.usuario || '-'}</td>
-          <td>${r.contrasena || '-'}</td>
-          <td>${r.filtro || '-'}</td>
-          <td>${photoHtml}</td>
-          <td style="font-size:0.8rem; color: #888;">${r.navegador || '-'}</td>
-        </tr>
-      `;
-    }).join('');
-  }
-</script>
-</body>
-</html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#101925"><title>Administración · Anotherface</title><link rel="stylesheet" href="styles.css"></head>
+<body><div class="ambient" aria-hidden="true"></div>
+<header class="topbar"><a class="brand" href="/">Anotherface<span class="brand-dot"></span></a><a class="subtle" href="/">Volver a la cámara</a></header>
+<main class="workspace">
+<section id="admin-login" class="login-box"><p class="eyebrow">ADMINISTRACIÓN</p><h1>Bienvenido</h1><p class="subtle">Accede a las fotos del estudio.</p>
+<form id="admin-form"><label for="admin-email">Correo electrónico</label><input type="email" id="admin-email" required autocomplete="username">
+<label for="admin-pwd">Contraseña</label><input type="password" id="admin-pwd" required autocomplete="current-password">
+<button class="btn btn-primary" type="submit">Entrar al panel</button></form><p id="admin-error" class="error status" role="alert"></p></section>
+<section id="admin-dashboard" class="hidden">
+<div class="page-heading"><div><p class="eyebrow">ADMINISTRACIÓN</p><h1>Fotos del estudio</h1></div><button id="logout-btn" class="btn btn-ghost">Cerrar sesión</button></div>
+<div class="admin-toolbar"><p class="subtle">Solo fotos tomadas en las últimas 4 horas. Sin registros de actividad.</p><button id="refresh-btn" class="btn btn-ghost">Actualizar</button></div>
+<p id="gallery-status" class="status" role="status"></p><div id="gallery" class="gallery"></div>
+<nav class="pagination" aria-label="Páginas de fotos"><button id="prev-page" class="btn btn-ghost" disabled>Anterior</button><span id="page-label" class="subtle"></span><button id="next-page" class="btn btn-ghost" disabled>Siguiente</button></nav>
+</section>
+<dialog id="photo-detail" aria-labelledby="detail-title"><div class="detail-head"><h2 id="detail-title">Detalle de foto</h2><button id="close-detail" class="btn btn-ghost">Cerrar</button></div>
+<div class="detail-grid"><div class="detail-picture"><img id="detail-image" alt="Foto seleccionada"><canvas id="detail-mesh" aria-hidden="true"></canvas></div>
+<div><dl id="detail-fields"></dl><label class="check-row"><input id="show-mesh" type="checkbox"><span>Mostrar puntos faciales</span></label><p id="mesh-note" class="subtle"></p><a id="detail-download" class="btn btn-primary" download>Descargar foto</a></div></div></dialog>
+</main><footer class="app-footer"><span>Anotherface · UNITEC</span><span>Acceso restringido</span></footer><script src="admin.js" defer></script></body></html>

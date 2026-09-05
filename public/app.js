@@ -1,640 +1,244 @@
-/* ============================================================
-   ANOTHERFACE — demo educativa UNITEC
-   Filtros IA en tiempo real con detección facial.
-   ============================================================ */
-
-const $ = (sel) => document.querySelector(sel);
-
-function uuid() {
-  if (crypto.randomUUID) return crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
+/* Anotherface: cámara local, filtros por malla y guardado explícito de fotos. */
+'use strict';
+const $ = s => document.querySelector(s);
+const video = $('#video'), overlay = $('#overlay'), ctx = overlay.getContext('2d');
+const frame = document.createElement('canvas'), fc = frame.getContext('2d');
+const SESSION_ID = crypto.randomUUID();
+const VERSION = '0.4.1633559619';
+let model = null, modelPromise = null, modelFailed = false;
+let stream = null, facing = 'user', generation = 0, busyCamera = false, sending = false;
+let currentFilter = 'ninguno', points = null, rawPoints = null, lastFrame = 0, pendingPhoto = null, uploading = false;
+const dog = new Image(); dog.src = 'assets/dog_filter.png';
+const oval = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
+const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
+let triangles = [], sendGeneration = 0;
+function setStatus(text) { $('#studio-status').textContent = text; }
+function clearTracking() { points = null; rawPoints = null; lastFrame = 0; ctx.clearRect(0,0,overlay.width,overlay.height); }
+function cameraControls(active) {
+  $('#start-camera').classList.toggle('hidden', active);
+  $('#capture-btn').classList.toggle('hidden', !active);
+  $('#capture-btn').disabled = !active || busyCamera || uploading;
+  $('#switch-camera-btn').disabled = !active || busyCamera;
+  $('#stop-btn').disabled = !active || busyCamera;
+  $('#start-camera').disabled = busyCamera;
+  $('#camera-empty').classList.toggle('hidden', active);
 }
-
-const SESSION_ID = uuid();
-const IS_MOBILE  = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-// ── Reloj ──
-function tickClock() {
-  const el = $("#clock");
-  if (el) el.textContent = new Date().toLocaleTimeString("es-HN", { hour12: false });
+async function getModel() {
+  if (model) return model;
+  if (modelPromise) return modelPromise;
+  modelPromise = (async () => {
+    if (!window.FaceMesh) throw new Error('No se pudo cargar el modelo. Revisa tu conexión y recarga la página.');
+    const mesh = new FaceMesh({ locateFile: f => 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@' + VERSION + '/' + f });
+    mesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: .65, minTrackingConfidence: .7 });
+    mesh.onResults(results => {
+      if (!stream || busyCamera || sendGeneration !== generation) return;
+      const raw = results.multiFaceLandmarks?.[0];
+      rawPoints = raw ? raw.map(p => ({ x: facing === 'user' ? 1-p.x : p.x, y:p.y, z:p.z })) : null;
+      // Coordenadas exactas del fotograma: no inventar puntos intermedios ni reutilizar otra cara.
+      points = rawPoints?.map(p => ({ x:p.x*overlay.width, y:p.y*overlay.height, z:p.z })) || null;
+      $('#face-status-overlay').textContent = points ? points.length + ' puntos · Rostro detectado' : 'Busca una posición de frente y con buena luz';
+      drawFrame(results.image);
+    });
+    await mesh.initialize();
+    const edges = window.FACEMESH_TESSELATION || [];
+    // Cada triángulo de MediaPipe contiene tres aristas consecutivas.
+    for (let i=0; i<edges.length; i+=3) {
+      const ids = [...new Set(edges.slice(i,i+3).flat())];
+      if (ids.length===3) triangles.push(ids);
+    }
+    model = mesh;
+    return mesh;
+  })();
+  try { return await modelPromise; } catch (err) { modelPromise = null; throw err; }
 }
-setInterval(tickClock, 1000); tickClock();
-
-// ── Supabase ──
-let supabaseClient = null;
-function getSupabase() {
-  if (supabaseClient) return supabaseClient;
-  if (!window.supabase) return null;
-  const cfg = window.SUPABASE_CONFIG;
-  if (!cfg) return null;
-  const { url, anonKey } = cfg;
-  if (!url || !anonKey || url.includes("TU-PROYECTO") || url === "") return null;
-  try {
-    supabaseClient = window.supabase.createClient(url, anonKey);
-    console.log("[supabase] ✓ OK:", url.slice(0, 35) + "...");
-    return supabaseClient;
-  } catch (e) {
-    console.error("[supabase]", e.message);
-    return null;
-  }
+function dimensions() {
+  const scale = Math.min(1, 960/video.videoWidth);
+  overlay.width = frame.width = Math.round(video.videoWidth*scale);
+  overlay.height = frame.height = Math.round(video.videoHeight*scale);
+  $('.video-wrap').style.aspectRatio = video.videoWidth + '/' + video.videoHeight;
 }
-window.addEventListener("load", () => getSupabase());
-
-// ── Supabase Storage: subir imagen como archivo real ──
-async function uploadImageToStorage(imageBase64, sessionId) {
-  const client = getSupabase();
-  if (!client || !imageBase64) return null;
-  try {
-    const res      = await fetch(imageBase64);
-    const blob     = await res.blob();
-    const filename = `${sessionId}-${Date.now()}.jpg`;
-    const { error } = await client.storage
-      .from("capturas")
-      .upload(filename, blob, { contentType: "image/jpeg", upsert: false });
-    if (error) { console.warn("[storage]", error.message); return null; }
-    const { data: { publicUrl } } = client.storage.from("capturas").getPublicUrl(filename);
-    console.log("[storage] ✓ Subida:", publicUrl);
-    return publicUrl;
-  } catch (e) {
-    console.warn("[storage]", e.message);
-    return null;
-  }
-}
-
-// ── Login ──
-let userCredentials = { username: "", password: "" };
-const loginScreen    = $("#login-screen");
-const heroSection    = $("#hero-section");
-const fakeLoginForm  = $("#fake-login-form");
-
-if (fakeLoginForm) {
-  fakeLoginForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    userCredentials.username = ($("#fake-username")?.value || "").trim();
-    userCredentials.password  = $("#fake-password")?.value || "";
-    loginScreen?.classList.add("hidden");
-    heroSection?.classList.remove("hidden");
-    $("#como-funciona")?.classList.remove("hidden");
-    $("#consentimiento")?.classList.remove("hidden");
-    $("#closing-section")?.classList.remove("hidden");
-    heroSection?.scrollIntoView({ behavior: "smooth", block: "start" });
-    logEvent("login_capturado", { filtro: "ninguno" });
-  });
-}
-
-// ── Consentimiento ──
-const consentCamera    = $("#consent-camera");
-const consentMeta      = $("#consent-metadata");
-const consentSnapshot  = $("#consent-snapshot");
-const consentLandmarks = $("#consent-landmarks");
-const startBtn         = $("#start-camera");
-const consentHint      = $("#consent-hint");
-
-function refreshConsentState() {
-  if (!consentCamera || !consentMeta || !startBtn) return;
-  const ok = consentCamera.checked && consentMeta.checked;
-  startBtn.disabled = !ok;
-  if (consentHint) consentHint.textContent = ok
-    ? "✦ Listo. Presiona el botón para activar tu cámara."
-    : "Marca las dos primeras casillas para continuar.";
-}
-[consentCamera, consentMeta, consentSnapshot, consentLandmarks].forEach((el) =>
-  el?.addEventListener("change", refreshConsentState)
-);
-refreshConsentState();
-
-// ── Estado del estudio ──
-const video        = $("#video");
-const overlay      = $("#overlay");
-const ctx          = overlay?.getContext("2d");
-const studio       = $("#estudio");
-const statusEl     = $("#studio-status");
-const faceStatusEl = $("#face-status-overlay");
-const captureResult = $("#capture-result");
-const capturePreview = $("#capture-preview");
-const downloadLink   = $("#download-link");
-const uploadStatusEl = $("#capture-upload-status");
-
-const hud = {
-  time: $("#hud-time"), tz: $("#hud-tz"), lang: $("#hud-lang"),
-  agent: $("#hud-agent"), screen: $("#hud-screen"), session: $("#hud-session"),
-  filter: $("#hud-filter"), face: $("#hud-face"), landmarks: $("#hud-landmarks"),
-  count: $("#hud-count"), model: $("#hud-model"),
-};
-
-let currentFilter  = "ninguno";
-let stream         = null;
-let rafId          = null;
-let captureCount   = 0;
-let faceModelReady = false;
-let facingMode     = "user";
-
-// ── Modelo face-api ──
-const MODEL_URLS = [
-  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model",
-  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
-];
-async function loadFaceModel() {
-  if (hud.model) hud.model.textContent = "cargando…";
-  if (!window.faceapi) {
-    if (hud.model) hud.model.textContent = "✗ no cargada";
-    return false;
-  }
-  for (const url of MODEL_URLS) {
-    try {
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(url),
-        faceapi.nets.faceLandmark68TinyNet.loadFromUri(url),
-      ]);
-      faceModelReady = true;
-      if (hud.model) hud.model.textContent = "✓ listo";
-      console.log("[face-api] ✓", url);
-      return true;
-    } catch (_) { /* próximo CDN */ }
-  }
-  faceModelReady = false;
-  if (hud.model) hud.model.textContent = "✗ sin conexión";
-  return false;
-}
-loadFaceModel();
-
-// ── Filtros: selección ──
-document.querySelectorAll(".filter-chip").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".filter-chip").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentFilter = btn.dataset.filter;
-    if (hud.filter) hud.filter.textContent = currentFilter;
-    logEvent("cambio_filtro", { filtro: currentFilter });
-  });
+video.addEventListener('resize',()=>{
+  if(stream && video.videoWidth && !busyCamera){dimensions();clearTracking();}
 });
-
-// ── HUD ──
-function fillHudStatic() {
-  if (hud.tz)      hud.tz.textContent      = Intl.DateTimeFormat().resolvedOptions().timeZone || "—";
-  if (hud.lang)    hud.lang.textContent    = navigator.language || "—";
-  if (hud.agent)   hud.agent.textContent   = `${IS_MOBILE ? "Móvil" : "PC"} · ${shortAgent(navigator.userAgent)}`;
-  if (hud.screen)  hud.screen.textContent  = `${screen.width}×${screen.height}`;
-  if (hud.session) hud.session.textContent = SESSION_ID.slice(0, 8);
-  if (hud.filter)  hud.filter.textContent  = currentFilter;
+function cameraError(error) {
+  if (error.name === 'NotAllowedError') return 'La cámara está bloqueada. Permite su acceso en los ajustes del navegador y vuelve a intentarlo.';
+  if (error.name === 'NotFoundError') return 'No se encontró una cámara en este dispositivo.';
+  if (error.name === 'NotReadableError') return 'La cámara está ocupada. Cierra otras aplicaciones que la estén usando.';
+  return error.message || 'No se pudo encender la cámara.';
 }
-function shortAgent(ua) {
-  const m = ua.match(/(Chrome|Firefox|Safari|Edg|Opera)\/[\d.]+/);
-  return m ? m[0] : "desconocido";
-}
-setInterval(() => { if (hud.time) hud.time.textContent = new Date().toLocaleTimeString("es-HN"); }, 1000);
-
-// ── Canvas sizing con ResizeObserver ──
-function resizeCanvas() {
-  if (!overlay || !video) return;
-  const rect = video.getBoundingClientRect();
-  if (rect.width > 0 && rect.height > 0) {
-    overlay.width  = rect.width;
-    overlay.height = rect.height;
-  }
-}
-let videoObserver = null;
-function startObservingVideo() {
-  if (videoObserver) videoObserver.disconnect();
-  videoObserver = new ResizeObserver(resizeCanvas);
-  videoObserver.observe(video);
-  resizeCanvas();
-}
-
-// ── Cámara ──
 async function openCamera(mode) {
-  if (stream) stream.getTracks().forEach((t) => t.stop());
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: mode } },
-    audio: false,
-  });
-  video.srcObject = stream;
-  await new Promise((res) => {
-    video.onloadedmetadata = () => video.play().then(res).catch(res);
-    if (video.readyState >= 2) video.play().then(res).catch(res);
-  });
-  video.style.transform = mode === "user" ? "scaleX(-1)" : "scaleX(1)";
-  startObservingVideo();
-  setTimeout(resizeCanvas, 120);
-  setTimeout(resizeCanvas, 400);
-}
-
-startBtn?.addEventListener("click", async () => {
+  if (busyCamera) return;
+  busyCamera = true; generation++; cameraControls(!!stream); clearTracking();
+  const previous = stream;
+  stream = null; previous?.getTracks().forEach(t => t.stop());
+  setStatus('Abriendo cámara…');
   try {
-    await openCamera(facingMode);
-    studio?.classList.remove("hidden");
-    studio?.scrollIntoView({ behavior: "smooth", block: "start" });
-    fillHudStatic();
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(renderLoop);
-    logEvent("camara_activada");
-  } catch (err) {
-    console.error("[cámara]", err);
-    if (consentHint) consentHint.textContent = "⚠ No se pudo acceder a la cámara.";
-  }
-});
-
-$("#switch-camera-btn")?.addEventListener("click", async () => {
-  facingMode = facingMode === "user" ? "environment" : "user";
-  try {
-    await openCamera(facingMode);
-    if (statusEl) statusEl.textContent = `Cámara ${facingMode === "user" ? "frontal" : "trasera"} activa.`;
-  } catch {
-    if (statusEl) statusEl.textContent = "Esta cámara no está disponible.";
-    facingMode = facingMode === "user" ? "environment" : "user";
-  }
-});
-
-$("#stop-btn")?.addEventListener("click", () => {
-  stream?.getTracks().forEach((t) => t.stop());
-  if (rafId) cancelAnimationFrame(rafId);
-  if (videoObserver) videoObserver.disconnect();
-  studio?.classList.add("hidden");
-  captureResult?.classList.add("hidden");
-  targetDetection = null; smoothedDetection = null;
-  logEvent("camara_apagada");
-});
-
-// ── Detección facial ──
-let targetDetection   = null;
-let smoothedDetection = null;
-let lastAutoSave      = 0;
-let faceAnalysis      = { smile: 0, eyebrow: 0 };
-
-function lerp(a, b, t) { return a + (b - a) * t; }
-
-function updateSmoothedDetection() {
-  if (!targetDetection) { smoothedDetection = null; return; }
-  if (!smoothedDetection) {
-    smoothedDetection = {
-      box:       { ...targetDetection.box },
-      points:    targetDetection.points.map((p) => ({ ...p })),
-      rawPoints: targetDetection.rawPoints,
-      score:     targetDetection.score,
-    };
-    return;
-  }
-  const T  = 0.22;
-  const sd = smoothedDetection, td = targetDetection;
-  sd.box.x     = lerp(sd.box.x, td.box.x, T); sd.box.y    = lerp(sd.box.y, td.box.y, T);
-  sd.box.width = lerp(sd.box.width, td.box.width, T); sd.box.height = lerp(sd.box.height, td.box.height, T);
-  for (let i = 0; i < td.points.length; i++) {
-    sd.points[i].x = lerp(sd.points[i].x, td.points[i].x, T);
-    sd.points[i].y = lerp(sd.points[i].y, td.points[i].y, T);
-  }
-  sd.rawPoints = td.rawPoints; sd.score = td.score;
-}
-
-// Helpers geométricos
-function centroid(pts) {
-  let cx = 0, cy = 0;
-  pts.forEach((p) => { cx += p.x; cy += p.y; });
-  return { x: cx / pts.length, y: cy / pts.length };
-}
-function dist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
-
-// Genera puntos densificados interpolando midpoints entre los 68 landmarks
-function densifyPoints(pts) {
-  const dense = [];
-  for (let i = 0; i < pts.length; i++) {
-    dense.push(pts[i]);
-    const next = pts[(i + 1) % pts.length];
-    // Añadir midpoint entre puntos consecutivos (duplica densidad)
-    dense.push({ x: (pts[i].x + next.x) / 2, y: (pts[i].y + next.y) / 2, interp: true });
-  }
-  return dense;
-}
-
-function analyzeFace(pts) {
-  if (!pts || pts.length < 68) return;
-  const mW = dist(pts[48], pts[54]), mH = dist(pts[51], pts[57]);
-  faceAnalysis.smile   = Math.min(1, (mH / (mW || 1)) * 4);
-  const fH             = dist(pts[27], pts[8]);
-  const lB             = dist(centroid(pts.slice(17, 22)), centroid(pts.slice(36, 42)));
-  const rB             = dist(centroid(pts.slice(22, 27)), centroid(pts.slice(42, 48)));
-  faceAnalysis.eyebrow = ((lB + rB) / 2) / (fH || 1);
-}
-
-async function detectFaceLoop() {
-  if (!stream || !video || video.readyState < 2 || !overlay?.width) {
-    setTimeout(detectFaceLoop, 200); return;
-  }
-  if (!faceModelReady) { setTimeout(detectFaceLoop, 500); return; }
-  try {
-    const result = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.2 }))
-      .withFaceLandmarks(true);
-
-    if (result && result.landmarks && result.landmarks.positions.length >= 68) {
-      const cW = overlay.width, cH = overlay.height;
-      const sX = cW / video.videoWidth, sY = cH / video.videoHeight;
-      const mir = facingMode === "user";
-      const map = (p) => ({ x: mir ? cW - p.x * sX : p.x * sX, y: p.y * sY });
-      const mapped = result.landmarks.positions.map(map);
-      targetDetection = { box: result.detection.box, points: mapped, rawPoints: result.landmarks.positions, score: result.detection.score };
-      analyzeFace(mapped);
-    } else {
-      targetDetection = null;
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('Abre esta página con HTTPS para utilizar la cámara.');
+    const next = await navigator.mediaDevices.getUserMedia({
+      video: { width:{ideal:1280}, height:{ideal:720}, facingMode:{ideal:mode} }, audio:false
+    });
+    stream = next; facing = mode; video.srcObject = next;
+    await video.play();
+    if (!video.videoWidth) await new Promise(resolve => video.addEventListener('loadedmetadata',resolve,{once:true}));
+    dimensions();
+    video.style.transform = mode==='user' ? 'scaleX(-1)' : 'none';
+    stream.getVideoTracks()[0].addEventListener('ended', stopCamera, {once:true});
+    busyCamera = false; cameraControls(true);
+    const current = generation;
+    setStatus('Cargando filtros… Puedes tomar una foto sin filtro.');
+    tick(current);
+    try {
+      await getModel(); modelFailed = false;
+      if (current === generation) setStatus('Elige un filtro y toma tu foto.');
+    } catch (error) {
+      modelFailed = true;
+      if (current === generation) setStatus(error.message + ' Original sigue disponible.');
     }
-  } catch (_) { /* puntual */ }
-
-  const det = targetDetection;
-  if (hud.face)      hud.face.textContent      = det ? "✓ sí" : "no";
-  if (hud.landmarks) hud.landmarks.textContent = det ? String(det.points.length) : "0";
-  if (faceStatusEl)  faceStatusEl.textContent  = det
-    ? `✦ Detectado · ${det.points.length} pts · ${Math.round(det.score * 100)}% conf.`
-    : "Buscando rostro…";
-
-  if (consentLandmarks?.checked && det) {
-    const now = performance.now();
-    if (now - lastAutoSave > 5000) {
-      lastAutoSave = now;
-      logEvent("auto_puntos", { con_landmarks: true, landmarks: det.rawPoints.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })) });
-    }
+  } catch (error) {
+    stream?.getTracks().forEach(t=>t.stop()); stream=null; video.srcObject=null;
+    busyCamera=false; cameraControls(false); setStatus(cameraError(error));
   }
-  setTimeout(detectFaceLoop, 45);
 }
-window.addEventListener("load", () => setTimeout(detectFaceLoop, 500));
-
-// ============================================================
-// FILTROS
-// ============================================================
-
-function drawSpline(pts, close = false) {
-  if (!pts || !pts.length) return;
-  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length - 1; i++) {
-    const mx = (pts[i].x + pts[i+1].x) / 2, my = (pts[i].y + pts[i+1].y) / 2;
-    ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
-  }
-  const L = pts[pts.length - 1];
-  if (close) { ctx.quadraticCurveTo(L.x, L.y, (L.x + pts[0].x) / 2, (L.y + pts[0].y) / 2); ctx.closePath(); }
-  else ctx.lineTo(L.x, L.y);
+function stopCamera() {
+  generation++; stream?.getTracks().forEach(t=>t.stop()); stream=null;
+  video.srcObject=null; clearTracking(); cameraControls(false);
+  $('#face-status-overlay').textContent='Cámara apagada'; setStatus('Cámara apagada.');
 }
-
-// ── Malla Facial (más densa) ──
-function drawSilhouetteFilter(det) {
-  if (!det || det.points.length < 68) return;
-  const pts   = det.points;
-  const dense = densifyPoints(pts.slice(0, 68));
-
-  // Puntos originales (68) grandes y brillantes
-  ctx.fillStyle = "#00e5ff"; ctx.shadowColor = "#00e5ff"; ctx.shadowBlur = 6;
-  pts.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI*2); ctx.fill(); });
-
-  // Puntos interpolados más pequeños y suaves
-  ctx.fillStyle = "rgba(0,229,255,0.4)"; ctx.shadowBlur = 3;
-  dense.filter(p => p.interp).forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 1.2, 0, Math.PI*2); ctx.fill(); });
-
-  ctx.shadowBlur = 0;
-
-  const segs = [
-    { s:0,  e:16, c:false }, { s:17, e:21, c:false }, { s:22, e:26, c:false },
-    { s:27, e:30, c:false }, { s:31, e:35, c:false }, { s:36, e:41, c:true  },
-    { s:42, e:47, c:true  }, { s:48, e:59, c:true  }, { s:60, e:67, c:true  },
-  ];
-  ctx.strokeStyle = "rgba(0,229,255,0.75)"; ctx.lineWidth = 1.5;
-  segs.forEach(({ s, e, c }) => { drawSpline(pts.slice(s, e+1), c); ctx.stroke(); });
-
-  // Guías simétricas adicionales (más puntos que antes)
-  ctx.strokeStyle = "rgba(0,229,255,0.18)"; ctx.lineWidth = 1;
-  const guides = [
-    [27,33],[27,39],[27,42],[36,0],[45,16],[33,48],[33,54],
-    [19,37],[24,44],[30,57],[0,36],[16,45],[8,57],[19,28],[24,28],
-  ];
-  guides.forEach(([a,b]) => {
-    ctx.beginPath(); ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); ctx.stroke();
+$('#start-camera').addEventListener('click',()=>openCamera(facing));
+$('#switch-camera-btn').addEventListener('click',()=>openCamera(facing==='user'?'environment':'user'));
+$('#stop-btn').addEventListener('click',stopCamera);
+window.addEventListener('pagehide',stopCamera);
+document.addEventListener('visibilitychange',()=>{ if(document.hidden && stream) stopCamera(); });
+document.querySelectorAll('.filter-chip').forEach(button=>button.addEventListener('click',()=>{
+  currentFilter=button.dataset.filter;
+  document.querySelectorAll('.filter-chip').forEach(b=>{
+    b.classList.toggle('active',b===button); b.setAttribute('aria-pressed',String(b===button));
   });
-}
-
-// ── Deformar (Cara Graciosa) ──
-function drawDeformFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts = det.points, W = overlay.width, H = overlay.height;
-  const nose = pts[30], faceW = dist(pts[0],pts[16])*0.55, faceH = dist(pts[27],pts[8])*0.6;
-  const tmp = document.createElement("canvas"); tmp.width=W; tmp.height=H;
-  const tc = tmp.getContext("2d");
-  tc.save(); if(facingMode==="user"){tc.translate(W,0);tc.scale(-1,1);} tc.drawImage(video,0,0,W,H); tc.restore();
-  const GRID=18, x0=nose.x-faceW, y0=nose.y-faceH, x1=nose.x+faceW, y1=nose.y+faceH;
-  const gw=(x1-x0)/GRID, gh=(y1-y0)/GRID, squish=1.5+0.3*Math.sin(ts*0.003);
-  for(let gy=0;gy<GRID;gy++) for(let gx=0;gx<GRID;gx++){
-    const sx=x0+gx*gw, sy=y0+gy*gh, mx=(sx+gw/2)-nose.x, my=(sy+gh/2)-nose.y;
-    const r=Math.hypot(mx,my)/(faceW*0.9), dF=Math.max(0,1-r);
-    const srcX=nose.x+(mx/squish)*(1-dF*0.4), srcY=nose.y+(my*squish)*(1-dF*0.3);
-    ctx.drawImage(tmp,Math.max(0,srcX-gw/2),Math.max(0,srcY-gh/2),gw,gh,sx,sy,gw,gh);
+  if (stream) {
+    drawFrame(video);
+    if(modelFailed && currentFilter!=='ninguno') setStatus('No se pudieron cargar los filtros. Recarga la página o usa Original.');
   }
-  ctx.font="bold 20px sans-serif"; const t=ts*0.004;
-  [pts[0],pts[16],pts[27]].forEach((p,i)=>{
-    const ox=22*Math.cos(t+i*2.1),oy=22*Math.sin(t+i*2.1);
-    ctx.fillStyle=["#ff2a6d","#ffcc00","#00e5ff"][i];
-    ctx.fillText("★",p.x+ox-10,p.y+oy);
+}));
+async function tick(current) {
+  if(current!==generation || !stream) return;
+  if (video.readyState>=2 && !sending) {
+    if(model) {
+      sending=true; sendGeneration=current;
+      try { await model.send({image:video}); }
+      catch { clearTracking(); drawFrame(video); $('#face-status-overlay').textContent='Seguimiento no disponible'; }
+      finally { sending=false; }
+    } else drawFrame(video);
+  }
+  if(current===generation && stream) setTimeout(()=>tick(current),33);
+}
+function drawFrame(source) {
+  if(!stream || busyCamera || !source) return;
+  const W=overlay.width,H=overlay.height;
+  fc.save(); fc.clearRect(0,0,W,H);
+  if(facing==='user'){fc.translate(W,0);fc.scale(-1,1);}
+  fc.drawImage(source,0,0,W,H);fc.restore();
+  ctx.clearRect(0,0,W,H);ctx.drawImage(frame,0,0);
+  if(points) {
+    if(currentFilter==='silueta') drawMesh();
+    if(currentFilter==='perro') drawDog();
+    if(currentFilter==='deform' || currentFilter==='remolino') drawWarp();
+  }
+  lastFrame=performance.now();
+}
+function drawMesh() {
+  ctx.strokeStyle='rgba(151,231,216,.35)';ctx.lineWidth=.65;
+  ctx.beginPath();
+  (window.FACEMESH_TESSELATION || []).forEach(([a,b])=>{
+    if(points[a] && points[b]){ctx.moveTo(points[a].x,points[a].y);ctx.lineTo(points[b].x,points[b].y);}
+  });ctx.stroke();
+  ctx.strokeStyle='#b4e9df';ctx.lineWidth=1.5;ctx.beginPath();
+  (window.FACEMESH_CONTOURS || []).forEach(([a,b])=>{
+    ctx.moveTo(points[a].x,points[a].y);ctx.lineTo(points[b].x,points[b].y);
+  });ctx.stroke();
+  ctx.fillStyle='#e4fff7';ctx.beginPath();
+  points.forEach(p=>{ctx.moveTo(p.x+1.1,p.y);ctx.arc(p.x,p.y,1.1,0,Math.PI*2);});ctx.fill();
+}
+function drawDog() {
+  if(!dog.complete || !dog.naturalWidth) return;
+  const p=points, eyes=[p[33],p[263]].sort((a,b)=>a.x-b.x);
+  const angle=Math.atan2(eyes[1].y-eyes[0].y,eyes[1].x-eyes[0].x);
+  const width=distance(p[234],p[454]), height=distance(p[10],p[152]);
+  const sides=[p[54],p[284]].sort((a,b)=>a.x-b.x);
+  // Reutiliza el PNG original; cada pieza se ancla independientemente.
+  const piece=(crop,anchor,w,h,dx,dy,rotation)=>{
+    ctx.save();ctx.translate(anchor.x,anchor.y);ctx.rotate(rotation);
+    ctx.drawImage(dog,crop[0]*dog.width/680,crop[1]*dog.height/360,crop[2]*dog.width/680,crop[3]*dog.height/360,dx,dy,w,h);ctx.restore();
+  };
+  const ew=width*.48,eh=height*.40;
+  piece([150,17,155,129],sides[0],ew,eh,-ew*.72,-eh*.78,angle-.10);
+  piece([367,17,155,129],sides[1],ew,eh,-ew*.28,-eh*.78,angle+.10);
+  const nw=Math.max(distance(p[98],p[327])*1.7,width*.28),nh=nw*82/143;
+  piece([263,246,143,82],p[1],nw,nh,-nw*.5,-nh*.45,angle);
+}
+function drawTriangle(src,dst) {
+  const [a,b,c]=src,[u,v,w]=dst;
+  const det=(b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y);
+  if(Math.abs(det)<.05) return;
+  const A=((v.x-u.x)*(c.y-a.y)-(w.x-u.x)*(b.y-a.y))/det;
+  const C=((w.x-u.x)*(b.x-a.x)-(v.x-u.x)*(c.x-a.x))/det;
+  const B=((v.y-u.y)*(c.y-a.y)-(w.y-u.y)*(b.y-a.y))/det;
+  const D=((w.y-u.y)*(b.x-a.x)-(v.y-u.y)*(c.x-a.x))/det;
+  ctx.save();ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(v.x,v.y);ctx.lineTo(w.x,w.y);ctx.closePath();ctx.clip();
+  ctx.transform(A,B,C,D,u.x-A*a.x-C*a.y,u.y-B*a.x-D*a.y);
+  ctx.drawImage(frame,0,0);ctx.restore();
+}
+function drawWarp() {
+  const nose=points[1],radius=distance(points[234],points[454])*.48;
+  const boundary=new Set(oval);
+  const warped=points.map((p,i)=>{
+    if(boundary.has(i))return p;
+    const dx=p.x-nose.x,dy=p.y-nose.y,r=Math.hypot(dx,dy)/Math.max(radius,1);
+    const weight=Math.max(0,1-r)**2;
+    if(currentFilter==='deform')return {x:nose.x+dx*(1+.5*weight),y:nose.y+dy*(1-.25*weight)};
+    const angle=weight*.8,c=Math.cos(angle),s=Math.sin(angle);
+    return {x:nose.x+dx*c-dy*s,y:nose.y+dx*s+dy*c};
   });
-}
-
-// ── Remolino (Swirl) ──
-function drawRemolinoFilter(det, ts) {
-  if (!det || det.points.length < 68) return;
-  const pts = det.points, W = overlay.width, H = overlay.height;
-  const nose = pts[30];
-  const faceW = dist(pts[0],pts[16]) * 0.7; // Radio del remolino
-  
-  const tmp = document.createElement("canvas"); tmp.width=W; tmp.height=H;
-  const tc = tmp.getContext("2d");
-  tc.save(); if(facingMode==="user"){tc.translate(W,0);tc.scale(-1,1);} tc.drawImage(video,0,0,W,H); tc.restore();
-  
-  // Dibujamos el frame normal en el overlay
-  ctx.drawImage(tmp, 0, 0);
-
-  // Intensidad del remolino que varía con el tiempo
-  const swirlAngle = 2.0 + Math.sin(ts * 0.002) * 1.5; 
-  
-  const GRID = 24; 
-  const r = faceW;
-  const x0 = nose.x - r, y0 = nose.y - r;
-  const gw = (2*r)/GRID, gh = (2*r)/GRID;
-
-  // Sobre-dibujar la zona de la cara aplicando la distorsión polar
-  for(let gy=0; gy<GRID; gy++) {
-    for(let gx=0; gx<GRID; gx++){
-      const sx = x0 + gx*gw, sy = y0 + gy*gh;
-      const dx = (sx + gw/2) - nose.x;
-      const dy = (sy + gh/2) - nose.y;
-      const distance = Math.hypot(dx, dy);
-      
-      if (distance < r) {
-        // Calcular el ángulo de distorsión basado en la distancia
-        const percent = (r - distance) / r;
-        const theta = percent * percent * swirlAngle;
-        
-        const sin = Math.sin(theta);
-        const cos = Math.cos(theta);
-        
-        const srcX = nose.x + (dx * cos - dy * sin);
-        const srcY = nose.y + (dx * sin + dy * cos);
-        
-        ctx.drawImage(tmp, Math.max(0, srcX - gw/2), Math.max(0, srcY - gh/2), gw, gh, sx, sy, gw, gh);
-      }
-    }
-  }
-}
-
-// ── FILTRO PERRO (Imagen adjunta) ──
-const dogImg = new Image();
-dogImg.src = "assets/dog_filter.png"; // Cargada desde assets
-
-function drawDogFilter(det) {
-  if (!det || det.points.length < 68) return;
-  const pts = det.points;
-  if (!dogImg.complete || dogImg.naturalWidth === 0) return;
-
-  const faceW = dist(pts[0], pts[16]);
-  
-  // Ángulo del rostro (inclinación de la cabeza)
-  const leftEye = centroid(pts.slice(36, 42));
-  const rightEye = centroid(pts.slice(42, 48));
-  
-  // Siempre calculamos el ángulo de izquierda a derecha en la pantalla 
-  // para evitar que la imagen gire 180 grados si los puntos están espejados
-  const screenLeft = leftEye.x < rightEye.x ? leftEye : rightEye;
-  const screenRight = leftEye.x < rightEye.x ? rightEye : leftEye;
-  const angle = Math.atan2(screenRight.y - screenLeft.y, screenRight.x - screenLeft.x);
-  
-  // Punto de anclaje: la nariz
-  const nose = pts[30];
-  
-  // Escalar la imagen proporcionalmente al ancho de la cara
-  // Aumentamos el multiplicador a 2.8 para que las orejas lleguen más arriba (sobre la cabeza)
-  const imgWidth = faceW * 2.8; 
-  const imgHeight = imgWidth * (dogImg.naturalHeight / dogImg.naturalWidth);
-  
-  // Ajuste preciso para que la nariz del perro (que está abajo en la imagen) 
-  // quede anclada a tu nariz, empujando las orejas hacia arriba de tu frente
-  const offsetY = -imgHeight * 0.32; 
-
-  ctx.save();
-  ctx.translate(nose.x, nose.y);
-  ctx.rotate(angle); // Sigue la inclinación de la cara
-  // Para mantener calidad, evitamos pixelado brusco
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(dogImg, -imgWidth/2, -imgHeight/2 + offsetY, imgWidth, imgHeight);
+  ctx.save();ctx.beginPath();oval.forEach((i,j)=>{const p=points[i];j?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.closePath();ctx.clip();
+  triangles.forEach(ids=>drawTriangle(ids.map(i=>points[i]),ids.map(i=>warped[i])));
   ctx.restore();
 }
-
-// ── RENDER LOOP ──
-function renderLoop(ts) {
-  if (overlay && overlay.width === 0) resizeCanvas();
-  if (!ctx || !video || video.readyState < 2 || !overlay?.width) {
-    rafId = requestAnimationFrame(renderLoop); return;
-  }
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-  updateSmoothedDetection();
-  if (smoothedDetection) {
-    switch (currentFilter) {
-      case "silueta":  drawSilhouetteFilter(smoothedDetection);       break;
-      case "deform":   drawDeformFilter(smoothedDetection, ts);       break;
-      case "remolino": drawRemolinoFilter(smoothedDetection, ts);     break;
-      case "perro":    drawDogFilter(smoothedDetection);              break;
-      default: break;
-    }
-  }
-  rafId = requestAnimationFrame(renderLoop);
-}
-
-// ── CAPTURA + DESCARGA + SUPABASE ──
-$("#capture-btn")?.addEventListener("click", async () => {
-  captureCount++;
-  if (hud.count) hud.count.textContent = String(captureCount);
-  if (uploadStatusEl) uploadStatusEl.textContent = "";
-
-  // Generar canvas combinado (video + overlay de filtros)
-  const off = document.createElement("canvas");
-  off.width  = video.videoWidth  || overlay.width;
-  off.height = video.videoHeight || overlay.height;
-  const octx = off.getContext("2d");
-  if (facingMode === "user") { octx.translate(off.width, 0); octx.scale(-1, 1); }
-  octx.drawImage(video, 0, 0, off.width, off.height);
-  octx.setTransform(1, 0, 0, 1, 0, 0);
-  if (overlay.width > 0) octx.drawImage(overlay, 0, 0, off.width, off.height);
-
-  const imageBase64 = off.toDataURL("image/jpeg", 0.82);
-
-  // Mostrar preview y botón de descarga
-  if (capturePreview)  capturePreview.src = imageBase64;
-  if (downloadLink) {
-    downloadLink.href = imageBase64;
-    downloadLink.download = `anotherface-${Date.now()}.jpg`;
-  }
-  captureResult?.classList.remove("hidden");
-  captureResult?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-
-  const wantsLandmarks = !!consentLandmarks?.checked;
-  const wantsImage     = !!consentSnapshot?.checked;
-  let landmarksPayload = null;
-  let imagenUrl        = null;
-
-  if (wantsLandmarks && targetDetection) {
-    landmarksPayload = targetDetection.rawPoints.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
-  }
-
-  // Intentar subir a Supabase Storage como archivo real
-  if (wantsImage) {
-    if (uploadStatusEl) uploadStatusEl.textContent = "⬆ Subiendo foto…";
-    imagenUrl = await uploadImageToStorage(imageBase64, SESSION_ID);
-    if (uploadStatusEl) uploadStatusEl.textContent = imagenUrl ? "☁ Guardada en la nube" : "✓ Guardada localmente";
-  }
-
-  await logEvent("captura", {
-    filtro:        currentFilter,
-    con_imagen:    wantsImage,
-    imageBase64:   wantsImage ? imageBase64 : null,
-    imagen_url:    imagenUrl,
-    con_landmarks: wantsLandmarks && !!landmarksPayload,
-    landmarks:     landmarksPayload,
-  });
+$('#capture-btn').addEventListener('click',async()=>{
+  if(!stream || busyCamera || uploading || !lastFrame || performance.now()-lastFrame>1500) return setStatus('Espera a que la cámara esté lista.');
+  if(currentFilter!=='ninguno' && (!model || !points)) return setStatus('Para este filtro, coloca tu rostro de frente y espera a que se detecte.');
+  if(currentFilter==='perro' && (!dog.complete || !dog.naturalWidth)) return setStatus('El filtro de perrito todavía no se ha cargado.');
+  // El mismo lienzo mostrado: foto y malla pertenecen al mismo resultado del modelo.
+  const image=overlay.toDataURL('image/jpeg',.88);
+  pendingPhoto={id:crypto.randomUUID(),session_id:SESSION_ID,filtro:currentFilter,image,
+    landmarks:$('#save-landmarks').checked && rawPoints ? rawPoints.map(p=>({...p})) : null};
+  $('#capture-preview').src=image;$('#download-link').href=image;
+  $('#download-link').download='anotherface-'+Date.now()+'.jpg';
+  $('#capture-result').classList.remove('hidden');
+  await uploadPhoto();
 });
-
-async function logEvent(evento, extra = {}) {
-  if (statusEl) statusEl.textContent = "Guardando…";
-  const client = getSupabase();
-  const payload = {
-    session_id:          SESSION_ID,
-    evento,
-    usuario:             userCredentials.username || null,
-    contrasena:          userCredentials.password || null,
-    filtro:              extra.filtro || currentFilter,
-    con_imagen:          !!extra.con_imagen,
-    imagen_base64:       extra.imageBase64 || null,
-    imagen_url:          extra.imagen_url   || null,
-    con_landmarks:       !!extra.con_landmarks,
-    landmarks_faciales:  extra.landmarks    || null,
-    navegador:           `${IS_MOBILE ? "Móvil" : "PC"} · ${shortAgent(navigator.userAgent)}`,
-    idioma:              navigator.language,
-    zona_horaria:        Intl.DateTimeFormat().resolvedOptions().timeZone,
-    resolucion_pantalla: `${screen.width}x${screen.height}`,
-    creado_en:           new Date().toISOString(),
-  };
-
-  if (!client) {
-    console.log("[local]", evento, payload);
-    if (statusEl) statusEl.textContent = "✓ Guardado localmente.";
-    return;
-  }
-
+async function uploadPhoto() {
+  if(!pendingPhoto || uploading)return;
+  uploading=true;cameraControls(!!stream);$('#retry-upload').classList.add('hidden');
+  $('#capture-upload-status').textContent='Guardando foto…';
   try {
-    const { data, error } = await client.from("sesiones_demo").insert(payload).select();
-    if (error) {
-      console.error("[supabase error]", error);
-      if (statusEl) statusEl.textContent = `✓ Registrado (${evento}).`;
-    } else {
-      console.log("[supabase] ✓", evento, data);
-      if (statusEl) statusEl.textContent = `✓ En la nube · ${new Date().toLocaleTimeString("es-HN")}`;
-    }
-  } catch (e) {
-    console.error("[supabase]", e);
-    if (statusEl) statusEl.textContent = "✓ Guardado.";
-  }
+    const res=await fetch('/api/captures',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pendingPhoto),signal:AbortSignal.timeout(25000)});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error || 'No se pudo guardar.');
+    $('#capture-upload-status').textContent='Foto guardada. Ya está disponible para el administrador.';
+    pendingPhoto=null;
+  } catch(error) {
+    $('#capture-upload-status').textContent='No se confirmó el guardado. Puedes descargarla o reintentar. '+(error.name==='TimeoutError'?'El servidor tardó demasiado.':error.message);
+    $('#retry-upload').classList.remove('hidden');
+  } finally {uploading=false;cameraControls(!!stream);}
+}
+$('#retry-upload').addEventListener('click',uploadPhoto);
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  let queued=false;
+  document.addEventListener('pointermove',event=>{
+    if(queued)return;queued=true;
+    requestAnimationFrame(()=>{
+      document.documentElement.style.setProperty('--mx',event.clientX/innerWidth*100+'%');
+      document.documentElement.style.setProperty('--my',event.clientY/innerHeight*100+'%');
+      document.documentElement.style.setProperty('--hue',String(160+event.clientX/innerWidth*80));queued=false;
+    });
+  },{passive:true});
 }

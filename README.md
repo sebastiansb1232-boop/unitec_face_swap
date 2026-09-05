@@ -1,203 +1,71 @@
-# ANOTHERFACE — demo educativa (UNITEC)
+# Anotherface · UNITEC
 
-Página web que pide acceso a la cámara (funciona igual en **PC y Android**,
-diseño responsive), aplica filtros en vivo que **siguen tu rostro** usando
-detección de landmarks faciales, y, con consentimiento explícito por capas,
-guarda un registro de la sesión en Supabase — incluyendo, si el usuario lo
-acepta, los puntos faciales detectados. El objetivo es **mostrar en vivo**
-qué tipo de datos puede recolectar una página con solo pedir permiso de
-cámara, para concientizar sobre seguridad y privacidad web.
+Estudio de fotos con filtros faciales. Mantiene Express, los cuatro efectos originales, la descarga de capturas y Supabase. Preparado para desplegar en Render; no se ha desplegado ni modificado la base de datos desde este trabajo.
 
-## Estructura del proyecto
+## Puesta en marcha en Render
 
-```
-unitec-privacidad/
-├── public/
-│   ├── index.html        # página completa (consentimiento + cámara + HUD)
-│   ├── styles.css          # estética "HUD de vigilancia" + fondo animado
-│   ├── config.js             # GENERADO por scripts/generate-config.js — no editar a mano
-│   └── app.js                 # cámara, detección de rostro, filtros y guardado
-├── supabase/
-│   └── schema.sql               # tabla + Row Level Security para Supabase
-├── scripts/
-│   └── generate-config.js         # lee .env / variables de Render y escribe public/config.js
-├── server.js                        # servidor Express opcional (solo si usas "Web Service")
-├── package.json
-├── render.yaml                        # configuración lista para Render (Static Site)
-├── .env.example                         # plantilla de variables de entorno
-└── .gitignore
-```
+1. Guarda una copia de seguridad de tu base de datos. Ejecuta `supabase/schema.sql` en el SQL Editor de TU proyecto de Supabase. La migración no elimina tablas ni fotos: añade campos faltantes, restringe el acceso directo y vuelve privado el bucket histórico `capturas`.
+2. Actualiza el código del repositorio que usa tu servicio de Render. No subas `.env`, `node_modules` ni claves.
+3. En Environment configura:
+   - `SUPABASE_URL`: URL del mismo proyecto donde ejecutaste la migración.
+   - `SUPABASE_SECRET_KEY`: clave secreta de servidor de ese proyecto. Alternativamente se admite `SUPABASE_SERVICE_ROLE_KEY` heredada.
+   - `ADMIN_EMAIL`: correo que quieras utilizar para entrar.
+   - `ADMIN_PASSWORD`: contraseña única de al menos 16 caracteres.
+   - `NODE_ENV=production` y `NODE_VERSION=22`.
+4. Tipo de servicio: **Web Service**, no Static Site. Build: `npm ci`. Start: `npm start`. Health check: `/healthz`. Se incluye `render.yaml`.
+5. Abre la URL HTTPS de Render. Toma una foto, espera «Foto guardada» y accede a `/admin.html` con las credenciales configuradas. Pulsa Actualizar.
 
-## 1. Configurar Supabase
+No se necesita `DATABASE_URL` ni `SUPABASE_ANON_KEY`. Las claves secretas nunca se entregan al navegador. Guardado y consulta usan el mismo backend y el mismo proyecto de Supabase.
 
-1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ve a **SQL Editor** y ejecuta el contenido de `supabase/schema.sql`.
-   Esto crea la tabla `sesiones_demo` con Row Level Security activado
-   (solo permite `insert` desde el navegador, no `select` — así nadie
-   puede leer las capturas de otras personas usando la clave pública).
-   La tabla incluye una columna `landmarks_faciales` (tipo `jsonb`) para
-   guardar los puntos del rostro cuando el usuario da ese consentimiento.
-3. Ve a **Project Settings → API** y copia:
-   - `Project URL`
-   - `anon public key`
+## Qué se corrigió
 
-## 2. El archivo `.env` (importante — léelo con calma)
+- Acceso público directo al estudio, sin formulario que capture contraseñas ni pantalla de términos.
+- Aviso visible del envío de fotos al administrador. Guardar puntos faciales es opcional, desmarcado por defecto.
+- Solo se generan registros al tomar una foto; no hay temporizadores de seguimiento, historial de filtros ni registros de acceso.
+- Guardado confirmado únicamente tras una respuesta satisfactoria. Ante fallo, la imagen se puede descargar o reenviar con el mismo identificador, sin duplicar el registro.
+- Panel con galería paginada, vista ampliada, descarga y puntos faciales opcionales. Recupera imágenes base64 y archivos históricos de Storage mediante enlaces firmados.
+- Administrador con contraseña configurable, cookies HttpOnly/SameSite, expiración de 4 horas y límites de intentos. Desaparecen la contraseña y el token fijos de la demo.
+- Seguimiento MediaPipe Face Mesh con refinamiento de ojos, labios e iris (478 puntos). No se presenta interpolación de 68 puntos como si fueran detecciones nuevas.
+- Perrito: orejas y nariz del PNG original ancladas por separado; escala e inclinación ligadas a la geometría facial.
+- Malla completa y deformaciones triangulares limitadas por el contorno real estimado.
+- Fondo reactivo al puntero, alternativa con movimiento reducido y diseño adaptable a PC/Android.
+- Cámara solo mediante acción del usuario. Se detiene al apagar, salir o poner la pestaña en segundo plano.
 
-Este proyecto **no guarda las claves de Supabase escritas directamente en
-el código**. En vez de eso, usa variables de entorno y un script que
-genera `public/config.js` automáticamente. Así puedes subir el repo a
-GitHub sin miedo a exponer tus claves, y cambiar de proyecto de Supabase
-sin tocar el código.
+## Privacidad y límites
 
-### Paso a paso en local
+El video y el seguimiento se procesan localmente. Al pulsar Tomar foto se envía la imagen; solo se adjuntan coordenadas x/y/z si la persona marca la opción. No se infiere género, identidad, edad ni otros atributos personales.
 
-1. Copia la plantilla:
-   ```bash
-   cp .env.example .env
-   ```
-2. Abre `.env` y completa tus valores reales:
-   ```
-   SUPABASE_URL=https://tuproyecto.supabase.co
-   SUPABASE_ANON_KEY=tu-anon-key-publica
-   ```
-3. Instala dependencias y genera `public/config.js`:
-   ```bash
-   npm install
-   npm run build
-   ```
-   Esto ejecuta `scripts/generate-config.js`, que lee tu `.env` (con la
-   librería `dotenv`) y escribe `public/config.js` con esos valores.
-4. Sirve la carpeta `public`:
-   ```bash
-   npx http-server public -p 8000
-   ```
-   (o `npm run dev`, que hace los dos pasos anteriores en uno).
+Los puntos son estimaciones geométricas del modelo, no medidas físicas, huellas biométricas fiables ni un reconocimiento de identidad. La topología es común, pero las coordenadas se calculan para cada rostro. Ningún filtro puede garantizar ausencia de errores: poca luz, oclusiones, perfiles extremos y movimientos rápidos reducen la precisión. Se sigue un rostro a la vez.
 
-**El archivo `.env` nunca se sube al repo** — está en `.gitignore`, junto
-con `public/config.js` (porque ese archivo se regenera solo y podría
-contener tus claves reales si lo generaste en local).
+Se usa el PNG original; contiene una marca visible en una oreja. Verifica sus derechos de uso antes de publicar.
 
-### En Render (producción)
+Las fotos nuevas se guardan como JPEG base64 en la tabla existente para que imagen y registro se escriban juntos. Adecuado para esta demo de corta duración, no para una fototeca grande: base64 aumenta aproximadamente un tercio el tamaño. Máximo 2,5 MB por foto y 20 solicitudes por minuto/IP. Para alto tráfico conviene Storage privado con persistencia transaccional, cuotas y límites compartidos.
 
-Render no lee tu `.env` local — en su lugar, tú defines las mismas
-variables en su dashboard y el build las usa automáticamente:
+El panel consulta solo las últimas 4 horas. El servidor activo elimina capturas base64 vencidas cada 15 minutos. Si Render duerme o se detiene, la eliminación queda pendiente hasta reanudarse; para una retención estricta configura una tarea programada en la base de datos. Las fotos históricas de Storage quedan privadas pero NO se borran automáticamente, para evitar eliminar archivos ajenos o perder datos. Gestionar su limpieza por separado.
 
-1. En el servicio de Render, ve a la pestaña **Environment**.
-2. Agrega:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-3. En cada build, Render ejecuta `npm run build`, que corre
-   `scripts/generate-config.js` y regenera `public/config.js` con los
-   valores que pusiste en el dashboard, antes de publicar el sitio.
+La migración no elimina credenciales históricas que almacenó la demo anterior. Esos campos no se vuelven a usar ni se muestran. Revísalos y gestiona su eliminación con autorización. El ZIP original incluía un archivo .env: rota sus credenciales si se compartió fuera de un entorno de confianza.
 
-Si no configuras nada (ni `.env` local ni variables en Render), la página
-igual funciona: la cámara y los filtros corren en el navegador, y el
-registro se muestra solo en la consola (`console.log`) en vez de
-guardarse en Supabase.
+Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y varios servidores necesitan un almacén compartido. La app carga MediaPipe y fuentes desde CDN; necesita conexión para la primera carga. El navegador puede recordar el permiso de cámara: no es posible forzar el diálogo nativo en cada visita.
 
-## 3. Probar en local
+## Desarrollo y pruebas
 
-```bash
-npm install
-npm run dev
-```
+Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`.
 
-Abre `http://localhost:8000`. **Importante:** `getUserMedia` (acceso a
-cámara) solo funciona en `https://` o en `http://localhost`, nunca en
-`http://` con una IP directa — esto aplica también si pruebas desde el
-celular apuntando a la IP de tu compu en la misma red.
+Las pruebas automatizadas usan un Supabase simulado y cubren autenticación, permisos, captura, errores y consulta del panel. No prueban credenciales reales, cámaras físicas, precisión facial ni un despliegue real.
 
-### Probar en un celular Android durante el desarrollo
+Validación realizada en esta entrega: cuatro pruebas en memoria aprobadas (`node --test tests/unit.test.js`), comprobación de sintaxis de JavaScript y revisión de diferencias sin errores. La ejecución HTTP completa quedó bloqueada por las restricciones de red del entorno; se incluye `tests/api.test.js` para ejecutarla localmente. No se ha realizado una comprobación visual en navegador.
 
-Si quieres probarlo en tu Android antes de desplegarlo, la forma más
-simple es usar un túnel HTTPS temporal, por ejemplo con `ngrok`:
+Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
+- Permitir y denegar cámara; encender, apagar y cambiar cámara.
+- Orientación vertical/horizontal y giro del rostro; filtros sin rostro.
+- Captura idéntica a la vista previa y descarga JPEG.
+- Foto visible en admin; malla solo cuando se autoriza; sin registros por esperar.
+- Fallo de red, reintento y sesión caducada.
+- Confirmar que usuarios anónimos no pueden leer la tabla ni el bucket.
 
-```bash
-npx ngrok http 8000
-```
+## Referencias oficiales
 
-Abre la URL `https://...ngrok...` que te da, desde el navegador de tu
-Android. Sin HTTPS, Chrome/Firefox en Android bloquean el acceso a la
-cámara igual que en PC.
-
-## 4. Subir a tu repositorio
-
-```bash
-git init
-git add .
-git commit -m "Demo PANÓPTICO - UNITEC"
-git branch -M main
-git remote add origin <URL_DE_TU_REPO>
-git push -u origin main
-```
-
-Como `.env` y `public/config.js` están en `.gitignore`, no se suben tus
-claves — solo la plantilla `.env.example`.
-
-## 5. Desplegar en Render
-
-**Opción recomendada — Static Site:**
-1. En Render: **New +** → **Blueprint** (usa el `render.yaml` incluido)
-   o **New +** → **Static Site** manualmente.
-2. Conecta tu repositorio.
-3. Si lo hiciste manual: **Build command:** `npm install && npm run build`
-   · **Publish directory:** `public`
-4. Ve a **Environment** y agrega `SUPABASE_URL` y `SUPABASE_ANON_KEY`
-   (ver sección 2).
-5. Deploy. Render te da HTTPS automáticamente — necesario tanto en PC
-   como en Android para que el navegador permita usar la cámara.
-
-**Alternativa — Web Service con Express:** usa `server.js` (incluido):
-Build command `npm install && npm run build`, Start command `npm start`.
-
-## PC y Android: qué cambia
-
-- El **diseño es el mismo sitio responsive** para ambos — no hay una app
-  aparte para Android, es la misma web que se adapta al tamaño de
-  pantalla (ver `styles.css`, sección de media queries).
-- En Android aparece un botón **"↺ Cambiar cámara"** para alternar entre
-  la cámara frontal y la trasera (`facingMode: user` / `environment`);
-  en PC ese botón intenta lo mismo pero la mayoría de laptops solo tienen
-  una cámara, así que no notarás cambio.
-- En pantallas angostas el visor de cámara se ve en formato vertical
-  (3:4), como una cámara de celular, en vez del horizontal (4:3) de PC.
-- Los botones y casillas tienen un tamaño mínimo de 44px, cómodo para
-  usar con el dedo.
-
-## Cómo está pensado el proyecto (para tu presentación)
-
-- **Consentimiento por capas:** hay cuatro casillas separadas —
-  usar la cámara, guardar metadata, guardar una foto, y guardar los
-  **puntos faciales (landmarks)**. Cada una es un permiso distinto a
-  propósito: la mayoría de sitios reales mezclan todo esto en un solo
-  "Permitir".
-- **Detección de rostro real:** se usa `face-api.js` (modelos
-  `tinyFaceDetector` + `faceLandmark68TinyNet`, livianos, cargados desde
-  CDN) para ubicar 68 puntos de la cara (ojos, cejas, nariz, boca,
-  mandíbula) en cada frame. Todos los filtros usan esos puntos para
-  seguir el rostro en tiempo real, no solo el de "máscara".
-- **Los landmarks son datos biométricos:** por eso tienen su propia
-  casilla de consentimiento, separada de la de guardar una foto normal
-  — es justo el punto de la demo: mostrar que estos datos se pueden leer
-  y guardar, y que deberían pedirse con la misma seriedad que cualquier
-  otro dato sensible.
-- **Panel HUD lateral:** mientras usas la cámara, un panel muestra en
-  vivo los datos "de contexto" (navegador, idioma, resolución, zona
-  horaria, si se detecta rostro, cuántos puntos se leyeron) que
-  cualquier sitio ya puede leer sin pedir ningún permiso especial.
-- **Row Level Security en Supabase:** la tabla solo permite `insert`
-  desde el navegador, nunca `select` — así el propio proyecto demuestra
-  una buena práctica en vez de dejar una base de datos abierta.
-
-## Privacidad y uso responsable
-
-- Este proyecto es para fines académicos. No lo despliegues para
-  recolectar datos de personas fuera del contexto del curso sin su
-  consentimiento informado.
-- Los landmarks faciales y las imágenes son datos sensibles: bórralos de
-  Supabase cuando termine la presentación:
-  ```sql
-  delete from public.sesiones_demo;
-  ```
-- Si vas a mostrar la demo en clase con voluntarios, avísales antes qué
-  se va a capturar y por qué, igual que hace la página.
+- [MediaPipe Face Mesh](https://chuoling.github.io/mediapipe/solutions/face_mesh.html)
+- [Supabase Data API](https://supabase.com/docs/guides/api)
+- [Claves de Supabase](https://supabase.com/docs/guides/getting-started/api-keys)
+- [Express en Render](https://render.com/docs/deploy-node-express-app)

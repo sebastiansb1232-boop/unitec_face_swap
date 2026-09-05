@@ -1,18 +1,21 @@
-# render.yaml — ANOTHERFACE · UNITEC
-# Tipo: Web Service (Node.js con Express)
-# El servidor sirve /config.js dinámicamente con las vars de entorno reales.
-# NO se necesita paso de build para generar config.js.
-
+# Render Blueprint: conservar el servicio y las variables al actualizarlo.
 services:
   - type: web
     name: anotherface-unitec
-    env: node
-    buildCommand: "npm install"
-    startCommand: "node server.js"
+    runtime: node
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: SUPABASE_SECRET_KEY
         sync: false
-      - key: DATABASE_URL
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
         sync: false
