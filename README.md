@@ -1,71 +1,195 @@
 # Anotherface · UNITEC
 
-Estudio de fotos con filtros faciales. Mantiene Express, los cuatro efectos originales, la descarga de capturas y Supabase. Preparado para desplegar en Render; no se ha desplegado ni modificado la base de datos desde este trabajo.
+<a id="readme-top"></a>
 
-## Puesta en marcha en Render
+<!-- PROJECT SHIELDS -->
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
 
-1. Guarda una copia de seguridad de tu base de datos. Ejecuta `supabase/schema.sql` en el SQL Editor de TU proyecto de Supabase. La migración no elimina tablas ni fotos: añade campos faltantes, restringe el acceso directo y vuelve privado el bucket histórico `capturas`.
-2. Actualiza el código del repositorio que usa tu servicio de Render. No subas `.env`, `node_modules` ni claves.
-3. En Environment configura:
-   - `SUPABASE_URL`: URL del mismo proyecto donde ejecutaste la migración.
-   - `SUPABASE_SECRET_KEY`: clave secreta de servidor de ese proyecto. Alternativamente se admite `SUPABASE_SERVICE_ROLE_KEY` heredada.
-   - `ADMIN_EMAIL`: correo que quieras utilizar para entrar.
-   - `ADMIN_PASSWORD`: contraseña única de al menos 16 caracteres.
-   - `NODE_ENV=production` y `NODE_VERSION=22`.
-4. Tipo de servicio: **Web Service**, no Static Site. Build: `npm ci`. Start: `npm start`. Health check: `/healthz`. Se incluye `render.yaml`.
-5. Abre la URL HTTPS de Render. Toma una foto, espera «Foto guardada» y accede a `/admin.html` con las credenciales configuradas. Pulsa Actualizar.
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/usuario/unitec_face_swap">
+    <img src="public/favicon.png" alt="Logo" width="80" height="80">
+  </a>
 
-No se necesita `DATABASE_URL` ni `SUPABASE_ANON_KEY`. Las claves secretas nunca se entregan al navegador. Guardado y consulta usan el mismo backend y el mismo proyecto de Supabase.
+  <h3 align="center">AnotherFace UNITEC</h3>
 
-## Qué se corrigió
+  <p align="center">
+    Demo educativa UNITEC — filtros IA con cámara y registro en Supabase.
+    <br />
+    <a href="https://github.com/usuario/unitec_face_swap"><strong>Explora los documentos »</strong></a>
+    <br />
+    <br />
+    <a href="https://github.com/usuario/unitec_face_swap">Ver Demo</a>
+    ·
+    <a href="https://github.com/usuario/unitec_face_swap/issues">Reportar Bug</a>
+    ·
+    <a href="https://github.com/usuario/unitec_face_swap/issues">Solicitar Característica</a>
+  </p>
+</div>
 
-- Acceso público directo al estudio, sin formulario que capture contraseñas ni pantalla de términos.
-- Aviso visible del envío de fotos al administrador. Guardar puntos faciales es opcional, desmarcado por defecto.
-- Solo se generan registros al tomar una foto; no hay temporizadores de seguimiento, historial de filtros ni registros de acceso.
-- Guardado confirmado únicamente tras una respuesta satisfactoria. Ante fallo, la imagen se puede descargar o reenviar con el mismo identificador, sin duplicar el registro.
-- Panel con galería paginada, vista ampliada, descarga y puntos faciales opcionales. Recupera imágenes base64 y archivos históricos de Storage mediante enlaces firmados.
-- Administrador con contraseña configurable, cookies HttpOnly/SameSite, expiración de 4 horas y límites de intentos. Desaparecen la contraseña y el token fijos de la demo.
-- Seguimiento MediaPipe Face Mesh con refinamiento de ojos, labios e iris (478 puntos). No se presenta interpolación de 68 puntos como si fueran detecciones nuevas.
-- Perrito: orejas y nariz del PNG original ancladas por separado; escala e inclinación ligadas a la geometría facial.
-- Malla completa y deformaciones triangulares limitadas por el contorno real estimado.
-- Fondo reactivo al puntero, alternativa con movimiento reducido y diseño adaptable a PC/Android.
-- Cámara solo mediante acción del usuario. Se detiene al apagar, salir o poner la pestaña en segundo plano.
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Tabla de Contenidos</summary>
+  <ol>
+    <li>
+      <a href="#sobre-el-proyecto">Sobre el Proyecto</a>
+      <ul>
+        <li><a href="#características">Características</a></li>
+        <li><a href="#construido-con">Construido Con</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#comenzando">Comenzando</a>
+      <ul>
+        <li><a href="#prerrequisitos">Prerrequisitos</a></li>
+        <li><a href="#instalación">Instalación</a></li>
+      </ul>
+    </li>
+    <li><a href="#uso">Uso</a></li>
+    <li><a href="#estructura-del-proyecto">Estructura del Proyecto</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#licencia">Licencia</a></li>
+  </ol>
+</details>
 
-## Privacidad y límites
+<!-- ABOUT THE PROJECT -->
+## Sobre el Proyecto
 
-El video y el seguimiento se procesan localmente. Al pulsar Tomar foto se envía la imagen; solo se adjuntan coordenadas x/y/z si la persona marca la opción. No se infiere género, identidad, edad ni otros atributos personales.
+[![Captura de Pantalla del Producto][product-screenshot]](https://github.com/usuario/unitec_face_swap)
 
-Los puntos son estimaciones geométricas del modelo, no medidas físicas, huellas biométricas fiables ni un reconocimiento de identidad. La topología es común, pero las coordenadas se calculan para cada rostro. Ningún filtro puede garantizar ausencia de errores: poca luz, oclusiones, perfiles extremos y movimientos rápidos reducen la precisión. Se sigue un rostro a la vez.
+AnotherFace es una aplicación web interactiva desarrollada para demostraciones educativas en UNITEC. Permite a los usuarios aplicar filtros faciales en tiempo real (malla, deformar, remolino, perrito) utilizando la cámara de su dispositivo. El procesamiento (landmarks faciales, deformaciones, etc.) se realiza directamente en el frontend usando tecnología web estándar, mientras que un backend en Node.js de manera segura administra la subida de capturas y la recolección de metadatos de sesión (con protección de Row Level Security en Supabase) para análisis avanzado posterior.
 
-Se usa el PNG original; contiene una marca visible en una oreja. Verifica sus derechos de uso antes de publicar.
+### Características
+* Detección facial en tiempo real usando MediaPipe Face Mesh.
+* Aplicación de filtros interactivos dinámicos: Original, Malla facial, Perrito, Deformar y Remolino animado.
+* Deformaciones basadas en topología geométrica y triangulación facial interna en 2D.
+* Interfaz web _Responsive_ (Dark Mode) con panel lateral de control de cámara.
+* Captura de foto temporal (hasta 4 horas de disponibilidad) y almacenamiento seguro a través de backend Node.js.
+* Recolección y registro de metadatos (puntos nodales y configuración de sesión) en Supabase (PostgreSQL).
+* Dashboard administrador básico incorporado en el entorno local.
 
-Las fotos nuevas se guardan como JPEG base64 en la tabla existente para que imagen y registro se escriban juntos. Adecuado para esta demo de corta duración, no para una fototeca grande: base64 aumenta aproximadamente un tercio el tamaño. Máximo 2,5 MB por foto y 20 solicitudes por minuto/IP. Para alto tráfico conviene Storage privado con persistencia transaccional, cuotas y límites compartidos.
+### Construido Con
 
-El panel consulta solo las últimas 4 horas. El servidor activo elimina capturas base64 vencidas cada 15 minutos. Si Render duerme o se detiene, la eliminación queda pendiente hasta reanudarse; para una retención estricta configura una tarea programada en la base de datos. Las fotos históricas de Storage quedan privadas pero NO se borran automáticamente, para evitar eliminar archivos ajenos o perder datos. Gestionar su limpieza por separado.
+* [![Node][Node.js]][Node-url]
+* [![Express][Express.js]][Express-url]
+* [![Supabase][Supabase]][Supabase-url]
+* [![MediaPipe][MediaPipe]][MediaPipe-url]
 
-La migración no elimina credenciales históricas que almacenó la demo anterior. Esos campos no se vuelven a usar ni se muestran. Revísalos y gestiona su eliminación con autorización. El ZIP original incluía un archivo .env: rota sus credenciales si se compartió fuera de un entorno de confianza.
+<p align="right">(<a href="#readme-top">volver arriba</a>)</p>
 
-Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y varios servidores necesitan un almacén compartido. La app carga MediaPipe y fuentes desde CDN; necesita conexión para la primera carga. El navegador puede recordar el permiso de cámara: no es posible forzar el diálogo nativo en cada visita.
+<!-- GETTING STARTED -->
+## Comenzando
 
-## Desarrollo y pruebas
+Para obtener una copia local funcionando, sigue estos sencillos pasos.
 
-Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`.
+### Prerrequisitos
 
-Las pruebas automatizadas usan un Supabase simulado y cubren autenticación, permisos, captura, errores y consulta del panel. No prueban credenciales reales, cámaras físicas, precisión facial ni un despliegue real.
+* Node.js 18.x o superior.
+* NPM (o gestor de dependencias de tu preferencia).
+* Cuenta de Supabase configurada con su respectivo proyecto de base de datos.
 
-Validación realizada en esta entrega: cuatro pruebas en memoria aprobadas (`node --test tests/unit.test.js`), comprobación de sintaxis de JavaScript y revisión de diferencias sin errores. La ejecución HTTP completa quedó bloqueada por las restricciones de red del entorno; se incluye `tests/api.test.js` para ejecutarla localmente. No se ha realizado una comprobación visual en navegador.
+### Instalación
 
-Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
-- Permitir y denegar cámara; encender, apagar y cambiar cámara.
-- Orientación vertical/horizontal y giro del rostro; filtros sin rostro.
-- Captura idéntica a la vista previa y descarga JPEG.
-- Foto visible en admin; malla solo cuando se autoriza; sin registros por esperar.
-- Fallo de red, reintento y sesión caducada.
-- Confirmar que usuarios anónimos no pueden leer la tabla ni el bucket.
+1. Clona el repositorio
+   \\\sh
+   git clone https://github.com/usuario/unitec_face_swap.git
+   \\\
+2. Instala los paquetes de NPM
+   \\\sh
+   cd unitec_face_swap
+   npm install
+   \\\
+3. Configura tus variables de entorno renombrando \.env.example\ a \.env\
+   \\\env
+   SUPABASE_URL=tu_url_de_supabase
+   SUPABASE_KEY=tu_service_role_key
+   ADMIN_PASSWORD=tu_contraseña_para_dashboard
+   \\\
 
-## Referencias oficiales
+<p align="right">(<a href="#readme-top">volver arriba</a>)</p>
 
-- [MediaPipe Face Mesh](https://chuoling.github.io/mediapipe/solutions/face_mesh.html)
-- [Supabase Data API](https://supabase.com/docs/guides/api)
-- [Claves de Supabase](https://supabase.com/docs/guides/getting-started/api-keys)
-- [Express en Render](https://render.com/docs/deploy-node-express-app)
+<!-- USAGE EXAMPLES -->
+## Uso
+
+Para iniciar el servidor de desarrollo local:
+
+\\\sh
+npm run start
+# o
+npm run dev
+\\\
+
+El servidor se iniciará en \http://localhost:3000\. Puedes acceder al panel de administrador en \http://localhost:3000/admin.html\ usando la contraseña configurada en el archivo \.env\.
+
+<p align="right">(<a href="#readme-top">volver arriba</a>)</p>
+
+## Estructura del Proyecto
+
+\\\	ext
+unitec_face_swap/
+├── public/                 # Archivos estáticos del Frontend
+│   ├── assets/             # Imágenes y recursos gráficos
+│   ├── index.html          # Interfaz principal de la aplicación web
+│   ├── app.js              # Lógica del frontend (Detección y Filtros en Canvas)
+│   ├── styles.css          # Estilos e interfaz oscura
+│   ├── admin.html          # Interfaz del panel de administrador
+│   └── admin.js            # Lógica del panel
+├── scripts/                # Scripts de automatización y construcción
+├── supabase/               # Archivos de configuración de base de datos
+│   └── schema.sql          # Esquema de Supabase y políticas RLS
+├── server.js               # Servidor backend Express (Node.js)
+├── package.json            # Dependencias del proyecto
+├── render.yaml             # Configuración de despliegue
+└── README.md               # Documentación del proyecto
+\\\
+
+<p align="right">(<a href="#readme-top">volver arriba</a>)</p>
+
+<!-- ROADMAP -->
+## Roadmap
+
+- [ ] Optimización de rendimiento para dispositivos móviles de gama baja.
+- [ ] Implementación de nuevos filtros estáticos (Face Swap).
+- [ ] Mejorar la calibración y seguimiento facial frente a giros extremos.
+
+Consulta los [issues abiertos](https://github.com/usuario/unitec_face_swap/issues) para ver una lista completa de las características propuestas (y problemas conocidos).
+
+<p align="right">(<a href="#readme-top">volver arriba</a>)</p>
+
+<!-- LICENSE -->
+## Licencia
+
+Distribuido bajo la Licencia MIT.
+
+<p align="right">(<a href="#readme-top">volver arriba</a>)</p>
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[contributors-shield]: https://img.shields.io/github/contributors/usuario/unitec_face_swap.svg?style=for-the-badge
+[contributors-url]: https://github.com/usuario/unitec_face_swap/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/usuario/unitec_face_swap.svg?style=for-the-badge
+[forks-url]: https://github.com/usuario/unitec_face_swap/network/members
+[stars-shield]: https://img.shields.io/github/stars/usuario/unitec_face_swap.svg?style=for-the-badge
+[stars-url]: https://github.com/usuario/unitec_face_swap/stargazers
+[issues-shield]: https://img.shields.io/github/issues/usuario/unitec_face_swap.svg?style=for-the-badge
+[issues-url]: https://github.com/usuario/unitec_face_swap/issues
+[license-shield]: https://img.shields.io/github/license/usuario/unitec_face_swap.svg?style=for-the-badge
+[license-url]: https://github.com/usuario/unitec_face_swap/blob/main/LICENSE
+[product-screenshot]: https://via.placeholder.com/800x400.png?text=AnotherFace+Screenshot
+[Node.js]: https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white
+[Node-url]: https://nodejs.org/
+[Express.js]: https://img.shields.io/badge/express.js-%23404d59.svg?style=for-the-badge&logo=express&logoColor=%2361DAFB
+[Express-url]: https://expressjs.com/
+[Supabase]: https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white
+[Supabase-url]: https://supabase.com/
+[MediaPipe]: https://img.shields.io/badge/MediaPipe-00A859?style=for-the-badge&logo=mediapipe&logoColor=white
+[MediaPipe-url]: https://developers.google.com/mediapipe
+
+
+
+
