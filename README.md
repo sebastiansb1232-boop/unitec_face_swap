@@ -62,13 +62,13 @@
 
 [![Captura de Pantalla del Producto][product-screenshot]](https://github.com/usuario/unitec_face_swap)
 
-AnotherFace es una aplicación web interactiva desarrollada para demostraciones educativas en UNITEC. Permite a los usuarios aplicar filtros faciales en tiempo real (malla, deformar, remolino, perrito) utilizando la cámara de su dispositivo. El procesamiento (landmarks faciales, deformaciones, etc.) se realiza directamente en el frontend usando tecnología web estándar, mientras que un backend en Node.js de manera segura administra la subida de capturas y la recolección de metadatos de sesión (con protección de Row Level Security en Supabase) para análisis avanzado posterior.
+AnotherFace es una aplicación web interactiva desarrollada para demostraciones educativas en UNITEC. Permite a los usuarios aplicar filtros faciales en tiempo real (malla, deformar, remolino, perrito) utilizando la cámara de su dispositivo. El procesamiento (landmarks faciales, deformaciones, etc.) se realiza directamente en el frontend usando tecnología web estándar, mientras que un backend en Node.js administra de manera segura la subida de capturas y la recolección de metadatos de sesión (con protección de Row Level Security en Supabase) para análisis avanzado posterior.
 
 ### Características
 * Detección facial en tiempo real usando MediaPipe Face Mesh.
 * Aplicación de filtros interactivos dinámicos: Original, Malla facial, Perrito, Deformar y Remolino animado.
 * Deformaciones basadas en topología geométrica y triangulación facial interna en 2D.
-* Interfaz web _Responsive_ (Dark Mode) con panel lateral de control de cámara.
+* Interfaz web *responsive* (Dark Mode) con panel lateral de control de cámara.
 * Captura de foto temporal (hasta 4 horas de disponibilidad) y almacenamiento seguro a través de backend Node.js.
 * Recolección y registro de metadatos (puntos nodales y configuración de sesión) en Supabase (PostgreSQL).
 * Dashboard administrador básico incorporado en el entorno local.
@@ -96,20 +96,20 @@ Para obtener una copia local funcionando, sigue estos sencillos pasos.
 ### Instalación
 
 1. Clona el repositorio
-   \\\sh
+   ```sh
    git clone https://github.com/usuario/unitec_face_swap.git
-   \\\
+   ```
 2. Instala los paquetes de NPM
-   \\\sh
+   ```sh
    cd unitec_face_swap
    npm install
-   \\\
-3. Configura tus variables de entorno renombrando \.env.example\ a \.env\
-   \\\env
+   ```
+3. Configura tus variables de entorno renombrando `.env.example` a `.env`
+   ```env
    SUPABASE_URL=tu_url_de_supabase
    SUPABASE_KEY=tu_service_role_key
    ADMIN_PASSWORD=tu_contraseña_para_dashboard
-   \\\
+   ```
 
 <p align="right">(<a href="#readme-top">volver arriba</a>)</p>
 
@@ -118,19 +118,19 @@ Para obtener una copia local funcionando, sigue estos sencillos pasos.
 
 Para iniciar el servidor de desarrollo local:
 
-\\\sh
+```sh
 npm run start
 # o
 npm run dev
-\\\
+```
 
-El servidor se iniciará en \http://localhost:3000\. Puedes acceder al panel de administrador en \http://localhost:3000/admin.html\ usando la contraseña configurada en el archivo \.env\.
+El servidor se iniciará en `http://localhost:3000`. Puedes acceder al panel de administrador en `http://localhost:3000/admin.html` usando la contraseña configurada en el archivo `.env`.
 
 <p align="right">(<a href="#readme-top">volver arriba</a>)</p>
 
 ## Estructura del Proyecto
 
-\\\	ext
+```text
 unitec_face_swap/
 ├── public/                 # Archivos estáticos del Frontend
 │   ├── assets/             # Imágenes y recursos gráficos
@@ -144,9 +144,9 @@ unitec_face_swap/
 │   └── schema.sql          # Esquema de Supabase y políticas RLS
 ├── server.js               # Servidor backend Express (Node.js)
 ├── package.json            # Dependencias del proyecto
-├── render.yaml             # Configuración de despliegue
+├── render.yaml              # Configuración de despliegue
 └── README.md               # Documentación del proyecto
-\\\
+```
 
 <p align="right">(<a href="#readme-top">volver arriba</a>)</p>
 
@@ -189,6 +189,8 @@ Distribuido bajo la Licencia MIT.
 [Supabase-url]: https://supabase.com/
 [MediaPipe]: https://img.shields.io/badge/MediaPipe-00A859?style=for-the-badge&logo=mediapipe&logoColor=white
 [MediaPipe-url]: https://developers.google.com/mediapipe
+
+
 
 
 
