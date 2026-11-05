@@ -37,6 +37,10 @@ test('las transiciones no superponen una pose o expresión anterior incompatible
   assert.equal(Q.textureTransition(a,{...b,expression:[.02,.2,.04]}),0);
   assert.equal(Q.textureTransition(a,{...b,registered:false}),0);
 });
+test('dos intercambios de la misma identidad solo se funden si pose y gesto son compatibles',()=>{
+ const a={registered:true,stableIdentity:true,model:'hyperswap_1c_256',referenceId:'same',yaw:0,pitch:0,expression:[.2,.2,.01]},b={...a,yaw:.02,expression:[.21,.2,.02]};
+ assert.equal(Q.textureTransition(a,b),80);assert.equal(Q.textureTransition(a,{...b,referenceId:'other'}),0);assert.equal(Q.textureTransition(a,{...b,expression:[.21,.2,.4]}),0);assert.equal(Q.textureTransition(a,{...b,yaw:.1}),0);
+});
 test('la profundidad detectada llega a la vista después de suavizar y predecir',()=>{
   const p=face(),smoother=new A.ExpressionSmoother(),motion=new NeuralMotion();
   motion.update(smoother.filter(p,.7,0),0);const next=p.map(q=>({...q,x:q.x+5}));

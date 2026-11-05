@@ -1,65 +1,79 @@
-# Another Face 1.14.0 · Intercambio sobre cámara y piel unificada
+# Another Face 1.15.0 · Integración natural y seguimiento por recorte
 
-## Qué cambia
+## Problemas corregidos a partir de tus capturas
 
-- **Intercambio neuronal es el motor inicial.** HyperSwap modifica el recorte de cámara con la identidad de las fotos; InSwapper es la alternativa cuando HyperSwap no está instalado. LivePortrait anima una fotografía y queda como una opción distinta, no como el motor recomendado para moldear tu cara. Si el worker es LivePortrait y eliges intercambio, la página avisa y pide iniciar el motor correcto.
-- **Sin fotografía de sustitución.** En intercambio, una textura sin registro válido o de una pose demasiado diferente se retira mientras llega otra. No se sustituye silenciosamente por la foto frontal ni se añaden ojos fotográficos. La cámara y el seguimiento continúan.
-- **Piel de rostro y cuerpo.** El valor inicial es «Referencia · Rostro y piel visible», con «Unificar toda la piel visible» activado. El modelo local distingue piel facial y corporal de ropa, cabello y fondo. Se ajustan por separado sus medianas al mismo objetivo de la frontal, manteniendo gradientes y sombras. Incluye cuello, orejas, brazos y manos cuando la segmentación los reconoce. Cámara conserva el cuerpo original; Intermedio comparte un objetivo mezclado. Desactivar la casilla permite limitar la corrección al rostro. No convierte toda la imagen en un color plano.
-- **Máscara que acompaña al movimiento.** La segmentación se calcula sobre una copia de hasta 256 píxeles en un Worker. Un control de antigüedad y diferencias de imagen retira zonas atrasadas para evitar pintar ropa o fondo al moverse. La comparación se realiza a la escala de la máscara para no dejar huecos sobre detalles finos. La vigencia tolera el costo de arranque y procesamiento sin devolver enseguida el tono original; la captura espera una muestra vigente. Los lienzos y los buffers se reutilizan.
-- **Boca generada completa por defecto.** «Interior de cámara · Opcional» está desactivado. No se recortan los labios de cámara para pegarlos sobre el retrato. Se corrige el saneamiento que podía separar los puntos interiores con la boca cerrada; el cierre sella todas las parejas interiores. El movimiento conserva el espesor del labio y utiliza señales de mandíbula/cierre para limitar puntos que siguen la lengua. El contorno responde más rápido que el resto de las proporciones.
-- **Registro coherente.** Cuando se corrige un punto de la boca generada, se corrigen tanto sus coordenadas de textura como su geometría. No se aplica una corrección a una sola mitad de la correspondencia. Se conservan la estabilización de pose, la predicción breve y una única solicitud neuronal en vuelo.
+En 1.14 la capa de piel podía llevar la sombra del cuello al brillo de la foto frontal. También pintaba la clase facial antes de recibir una generación: por eso el blanqueamiento aparecía incluso con «Esperando IA». El fondo preparado borraba la cara original completa y podía verse por debajo de su borde semitransparente. Más puntos de dibujo, por sí solos, no corrigen esos problemas.
 
-No se ha entrenado un modelo nuevo para tu persona ni un segmentador específico de lengua. La segmentación de piel y el intercambio siguen siendo estimaciones: oclusiones, perfiles extremos y gestos rápidos pueden fallar. La salida de HyperSwap es de 256 píxeles nativos; cuatro pasadas aumentan el tamaño a costa de tiempo, no garantizan detalle HD real.
+- **Color Natural inicial.** El matiz se acerca a la referencia conservando la exposición de cámara. El cambio de luminancia del cuerpo queda limitado a ±0,035 en la escala 0–1; no se iguala el brillo del cuello al de la cara. Se conserva la diferencia real de luz entre ambos. La capa corporal ya no pinta toda la clase facial ni sus ojos y boca. Se mantienen Cámara, Intermedio y Referencia, con protección de exposición. El intercambio recibe una sola corrección de color en el compositor, sin blanquear primero su textura. Ojos y dientes también reciben la exposición del entorno para evitar parches blancos; el matiz de piel se atenúa allí.
+- **Rostro ligado a la cámara.** El cambio geométrico neuronal se mide respecto a su propio fotograma de entrada, dentro del mismo marco. Se aplica como una corrección acotada sobre las facciones actuales, conservando su profundidad. Dos resultados de la misma identidad se funden brevemente solo si pose, gesto y exposición son compatibles. Antes, normalizar la salida con otra pose y usarla como una forma rígida podía congelar facciones o desplazar ojos/nariz al girar. Se conservan las comprobaciones contra inversión de triángulos y un límite más estrecho alrededor de ojos y labios.
+- **Gestos locales suaves.** Entre resultados del generador se compara la cámara actual con el recorte de cámara que acompañó a esa generación, alineados mediante la malla. La diferencia local se suma a la apariencia neuronal en ojos y boca. En una región sin cambios no se sustituye la textura neuronal; tampoco se pega una boca completa de cámara. Esta compensación usa píxeles de cámara y puede desactivarse. No es una generación nueva de IA y no incrementa su contador. «Interior de cámara» sigue siendo una alternativa explícita, desactivada por defecto.
+- **Boca y lengua.** El cierre conserva las parejas interiores selladas y el muestreo utiliza el contorno saneado, coherente con el fotograma de entrada. Una posición interior que sigue la lengua no se usa como nuevo límite del labio. La lengua permanece como contenido visual de la cavidad. No se ha entrenado un segmentador específico de lengua; oclusiones y una lengua muy extendida todavía pueden fallar.
+- **Fondo sin anillo bajo la máscara.** LaMa o el fondo capturado solo cubren la porción de la silueta original que queda realmente desocupada. Se conserva cámara bajo el borde suave de la nueva cara. Si los contornos coinciden, no se borra toda la cara por debajo. Se amplía la transición del borde. Las zonas de ojos y boca acompañan también la inclinación de la cabeza. Sin fondo preparado, la silueta continúa protegida; nunca se estiran cuello, ropa ni fondo para ocultar un cambio de forma.
 
-## Actualizar tu misma carpeta
+- **Foto sin desfase de malla.** Al pulsar Tomar foto se congela un fotograma y se detecta sobre esa misma imagen. La malla, el muestreo de piel y la composición utilizan esa captura inmutable, sin depender de una predicción antigua del video. Si hace falta otra generación neuronal para esa pose, la cámara permanece pausada hasta completar o cancelar la operación y después continúa. El guardado conserva la imagen compuesta y sus coordenadas correspondientes.
 
-Detén el motor anterior con Ctrl + C. Reemplaza el código de la carpeta existente con el contenido de Another-Face del ZIP. Conserva `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`. No anides otra carpeta Another-Face.
+## Precisión: puntos, superficie y resolución son cosas distintas
+
+El detector incluido estima **478 puntos**, con señales de expresión. Esta entrega no cambia ese número a 1000 o 2000 ni presenta puntos interpolados como nuevas mediciones.
+
+La precisión se mejora **recortando la cara antes de reducir la imagen**, en lugar de reducir primero toda la cámara y después ampliar una cara pequeña. El recorte utiliza píxeles de la cámara original y una entrada de hasta 512 píxeles; se busca de nuevo en el plano completo cada 12 detecciones o al perder el rostro. Las coordenadas x/y y la escala z vuelven al marco original. El detector funciona en modo IMAGE porque cada recorte tiene su propio sistema de coordenadas; la estabilización y la predicción temporal continúan fuera del detector. La alternativa Face Mesh activa el refinamiento de ojos, labios e iris.
+
+La superficie Refinada tiene **1790 vértices de dibujo**: los 468 de superficie base más 1322 vértices compartidos de arista. Se estima una curvatura limitada a partir de sus normales; ojos, labios y contorno mantienen sus mediciones. Se calcula una transición de borde más fina y se reutiliza la superficie entre detecciones. La opción Estándar utiliza 468 vértices de superficie. Los puntos de iris forman parte de las 478 mediciones y se usan para la mirada.
+
+**512 píxeles no significa 512 puntos faciales.** HyperSwap conserva sus 256 píxeles nativos; Más detalle utiliza cuatro pasadas para producir una salida de 512. LivePortrait, como opción fotográfica distinta, tiene otra arquitectura y salida de 512. Ninguno se convierte en un generador HD entrenado de 1000 o 2000 píxeles al aumentar el número de vértices.
+
+## Actualizar tu misma instalación
+
+Detén el motor con Ctrl + C. Copia el contenido de Another-Face del ZIP sobre tu carpeta actual, sin anidar otra carpeta. Conserva `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`.
 
 ```powershell
 cd "C:\Users\sebastian estevan\Desktop\FIEE-unitec\Another-Face"
 npm.cmd ci
-.\mejorar-ia-local.bat
 .\iniciar-intercambio-ia.bat
 ```
 
-`mejorar-ia-local.bat` añade HyperSwap 1C 256, unos 403 MB. Si ya está completo, lo verifica y reutiliza. Usa el entorno existente y no cambia DirectML. Si no tienes espacio, puedes iniciar el intercambio con los modelos básicos de InSwapper ya instalados. No es necesario volver a descargar LivePortrait.
+**Esta actualización no añade pesos ni requiere reinstalar DirectML.** Si ya utilizabas HyperSwap, como indican tus capturas, se reutiliza. No vuelvas a ejecutar los instaladores por este cambio de código. Inicia un solo motor.
 
-El nuevo iniciador fuerza la selección automática de intercambio: HyperSwap completo, después InSwapper. No hereda una selección `avatar` de otra terminal. No inicies dos workers simultáneamente. La animación fotográfica opcional mantiene su propio iniciador `iniciar-avatar-ia.bat` y su opción explícita en la página.
-
-En otra terminal, si el puente no sigue abierto:
+Mantén el puente actual si sigue abierto al puerto 8766. Si lo cerraste, abre otra terminal en esa misma carpeta:
 
 ```powershell
-cd "C:\Users\sebastian estevan\Desktop\FIEE-unitec\Another-Face"
 .\iniciar-tunel-ia.bat
 ```
 
-Si cambia la URL del túnel, actualiza `ANOTHERFACE_AI_URL` en Render y conserva el token que coincide con `.env.ai`. Un túnel todavía activo al puerto 8766 se puede reutilizar.
+Si cambia su URL, actualiza `ANOTHERFACE_AI_URL` en Render y conserva el token que coincide con `.env.ai`.
 
-## Actualizar main y Render
-
-Desde esa misma carpeta, después de comprobar que es la raíz correcta:
+Actualiza main y Render desde tu carpeta existente:
 
 ```powershell
 git rev-parse --show-toplevel
+git branch --show-current
 git status
 git add public local-ai scripts tests supabase *.js *.json *.md *.bat render.yaml .gitignore .env.example
 git diff --cached --stat
-git commit -m "Corrige intercambio, boca y piel de Another Face 1.14.0"
+git commit -m "Refina integración, gestos y superficie de Another Face 1.15.0"
 git push origin main
 ```
 
-Despliega el último commit de main en tu Web Service existente: Build `npm ci`, Start `npm start`. No se instala Python ni se suben los modelos a Render. Recarga con Ctrl + F5. La cabecera debe mostrar **1.14.0** y `/api/neural/status` debe indicar esa versión en `engine_version`, con `engine_kind: "face_swap"` y `model: "hyperswap_1c_256"` o `inswapper_128_fp16`. El protocolo sigue siendo 5 y la caché del cliente es v17. Esta entrega no se ha publicado en tu GitHub ni Render automáticamente.
+Comprueba que la raíz sea tu carpeta Another-Face y la rama sea main. El Web Service existente conserva Build `npm ci`, Start `npm start` y sus variables. Despliega el último commit y recarga con Ctrl + F5. La cabecera y `engine_version` de `/api/neural/status` deben indicar **1.15.0**; el protocolo sigue siendo 5 y la caché del cliente es v18. Esta entrega no se ha publicado automáticamente en tu GitHub ni Render.
 
-## Uso recomendado
+## Ajustes iniciales
 
-Elige **Intercambio neuronal · Cámara**, detalle **256 nativo · 1 pasada** si está instalado HyperSwap, perfil Natural, intensidad 100 %, color Referencia y unificación de piel activada. Mantén las mezclas del rostro original en cero y el interior de cámara desactivado. Mira de frente, con ojos abiertos y boca relajada, para calibrar. Carga una frontal y dos perfiles opuestos de la misma persona, preferiblemente entre 25 y 70 grados; el contador debe indicar tres vistas. Las fotos se conservan en memoria de la pestaña y debes volver a cargarlas tras recargar.
+Usa **Intercambio neuronal · Cámara**, **Natural · Matiz y luz del entorno**, perfil Natural, forma 65 %, bordes 65 %, una pasada y Gestos locales suaves activado. Las mezclas del rostro original y el Interior de cámara permanecen en cero/desactivados. Empieza **sin preparar LaMa**: comprueba primero la integración y el movimiento. El fondo es opcional para cambiar también la silueta exterior y necesita cámara fija.
 
-Sin fondo preparado se conserva la silueta original para no dejar recortes del cuerpo. Para reducir también el contorno de nariz o mandíbula, fija la cámara y prepara el fondo en «Retirar contorno original». La captura manual pide salir del encuadre durante tres segundos; el relleno opcional LaMa requiere `instalar-relleno-ia.bat`. No se estira la ropa o el cuello para cubrir el hueco. El fondo preparado no sirve si mueves la cámara o cambia el escenario.
+Carga frontal y perfiles opuestos de la misma persona, con ojos visibles y sin llegar a 90 grados. Se conservan en memoria de la pestaña; vuelve a cargarlos tras recargar si quieres las tres vistas. El control Parecido neuronal actúa sobre la identidad del modelo; Forma modifica su corrección geométrica. Subir ambos al máximo no garantiza mayor parecido.
 
-Se mantiene la corrección del error LaMa/DirectML de 1.13: LaMa se ejecuta en un hijo de CPU después de liberar las sesiones faciales; al terminar se reconstruye el motor y se preparan nuevos tokens. No hace falta cambiar el motor facial completo a CPU. `background_safe: true` identifica esa ruta. La generación facial se pausa durante la preparación del fondo.
+Si el navegador está cargado, el perfil Fluido utiliza entrada menor y superficie Estándar. La superficie refinada y la compensación local requieren trabajo adicional; no se oculta ese costo aumentando artificialmente los contadores.
 
-## Verificación y límites de rendimiento
+## Verificación y límites
 
-Pasan **107 pruebas JavaScript y 50 Python**; `npm audit` informa **0 vulnerabilidades** con el bloqueo de dependencias incluido. Las pruebas cubren cierre de labios sin abertura artificial, espesor del labio al hablar, puntos que siguen la lengua, propagación de señales faciales, separación entre intercambio y animación, resultados atrasados, tono común de cara/cuerpo y máscaras que pierden validez con movimiento. Las pruebas de píxeles WebGL comprueban tono común, espejo, captura y conservación de ropa/fondo en casos controlados.
+Pasan **122 pruebas JavaScript y 50 Python**. La auditoría de dependencias informa **0 vulnerabilidades**. Se prueban el límite de exposición con una referencia muy clara, la conservación de sombras, piel/ropa/fondo, coordenadas del recorte, pérdida y recuperación del seguimiento, curvatura y caché completa, mímica sobre la cámara y límites alrededor de ojos/labios. Se verifica también el cambio entre las dos superficies y la captura con HyperSwap real en CPU. Las pruebas de captura simulan que el video avanza mientras la detección espera, comprueban que imagen y malla conservan el mismo fotograma, recuperación del recorte y detector alternativo. La prueba completa verifica también que el video se reanuda tras guardar. Las pruebas de píxeles comparan con 1.14 la ausencia de pintura facial antes de IA, la conservación de sombras del cuerpo y la retirada exclusiva de zonas desocupadas del contorno. Comprueban además compensación local sin sustituir una región por cámara, exposición coherente de ojos/dientes, máscara desplazada y caché de los 1322 vértices añadidos.
 
-La página completa se verifica con Chromium, cámara simulada, tres referencias reales, HyperSwap 256 en CPU, segmentación real y captura guardada en un servidor simulado. Esto no equivale a probar conversación, lengua extendida ni perfiles dinámicos de tu cámara física. No se garantizan 30 generaciones/s, ausencia total de artefactos ni resultado fotorrealista en todos los gestos. Consulta [RENDIMIENTO.md](RENDIMIENTO.md) para las mediciones y sus condiciones.
+Las capturas filtradas aportadas sirven para identificar defectos, pero no contienen el video original necesario para medir todos los gestos, oclusiones y perfiles de tu cámara. No se garantiza ausencia total de errores ni fotorrealismo en cualquier situación. Tampoco se ha probado tu GPU física. La compensación mejora la continuidad entre generaciones; no convierte una generación por segundo en treinta generaciones nuevas.
+
+Consulta [RENDIMIENTO.md](RENDIMIENTO.md) para las condiciones y mediciones. Se conserva la corrección de LaMa de 1.13: hijo de CPU, liberación previa del motor facial, reconstrucción posterior y nuevo token, sin intentar el nodo FFT de LaMa en DirectML.
+
+## Fuentes técnicas
+
+- https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker
+- https://github.com/google-ai-edge/mediapipe/blob/master/docs/solutions/face_mesh.md
+- https://research.google/pubs/attention-mesh-high-fidelity-face-mesh-prediction-in-real-time/

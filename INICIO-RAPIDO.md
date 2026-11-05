@@ -1,6 +1,6 @@
 # Another Face · Inicio en Windows
 
-**Entrega 1.14.0:** el motor inicial es **Intercambio neuronal · Cámara**. HyperSwap 1C 256 modifica el recorte de cámara con la identidad de referencia; `mejorar-ia-local.bat` lo añade (403 MB), reutilizando el entorno y los pesos completos. Sin ese peso, se usa InSwapper. La piel visible de rostro y cuerpo se acerca al mismo tono de referencia. Las opciones de fotografía animada son efectos distintos y no sustituyen silenciosamente al intercambio. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
+**Entrega 1.15.0:** mejora la integración de color y conserva las sombras del cuello. Añade recorte facial antes del reescalado, superficie curva y compensación local de ojos/boca. Si ya tienes HyperSwap, **no necesitas descargar modelos ni reinstalar DirectML**. Actualiza el código y sigue [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
 
 **Para servir la página desde Render y utilizar la IA de tu PC**, sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Los pasos de esta página ejecutan web e IA juntas en la misma computadora.
 

@@ -1,4 +1,4 @@
-/* Seguimiento temporal de MediaPipe Tasks; alternativa para navegadores antiguos. */
+/* Detección sobre recortes móviles; la pose se estabiliza fuera del detector. */
 'use strict';
 let task=null,mesh=null,landmarks=null,refine=false,queue=Promise.resolve(),backend=null,role='live',lastTimestamp=0;
 const local=file=>new URL(file,self.location.href).href;
@@ -20,7 +20,7 @@ async function initialize(data){
     try{const probe=new OffscreenCanvas(1,1).getContext('webgl2'),debug=probe?.getExtension('WEBGL_debug_renderer_info');software=/swiftshader|llvmpipe|software|basic render/i.test(debug?probe.getParameter(debug.UNMASKED_RENDERER_WEBGL):'');probe?.getExtension('WEBGL_lose_context')?.loseContext();}catch{}
     for(const delegate of (role==='image'||data.forceCPU||software?['CPU']:['GPU','CPU'])){
       try{
-        task=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:local('assets/models/face_landmarker.task'),delegate},runningMode:role==='image'?'IMAGE':'VIDEO',numFaces:1,minFaceDetectionConfidence:.55,minFacePresenceConfidence:.55,minTrackingConfidence:.55,outputFaceBlendshapes:role==='live',outputFacialTransformationMatrixes:false});
+        task=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:local('assets/models/face_landmarker.task'),delegate},runningMode:'IMAGE',numFaces:1,minFaceDetectionConfidence:.55,minFacePresenceConfidence:.55,minTrackingConfidence:.55,outputFaceBlendshapes:role==='live',outputFacialTransformationMatrixes:false});
         backend='tasks-'+delegate.toLowerCase();break;
       }catch{task?.close();task=null;}
     }
@@ -36,7 +36,9 @@ async function handle(data){
   try{
     if(task){
       const timestamp=Math.max(lastTimestamp+.001,Number.isFinite(data.timestamp)?data.timestamp:performance.now());lastTimestamp=timestamp;
-      const result=role==='image'?task.detect(data.image):task.detectForVideo(data.image,timestamp);
+      // VIDEO reutiliza una ROI del fotograma anterior. Aquí cambia el marco
+      // del recorte, así que IMAGE evita reutilizar una ROI en otro sistema.
+      const result=task.detect(data.image);
       return {signals:result.faceBlendshapes?.[0]?.categories?Object.fromEntries(result.faceBlendshapes[0].categories.map(c=>[c.categoryName,c.score])):null,landmarks:result.faceLandmarks?.[0]||null,faces:result.faceLandmarks?.length||0,backend,ms:performance.now()-started};
     }
     const nextRefine=data.refine!==false;if(nextRefine!==refine){refine=nextRefine;mesh.setOptions({refineLandmarks:refine});await mesh.reset();}

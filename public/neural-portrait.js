@@ -100,7 +100,9 @@
             key.uv=fitted;key.registered=true;key.alignmentMs=Math.round(performance.now()-alignmentStarted);
             key.referenceLayers=views;key.generatedPoints=corrected.slice(0,468).map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}));if(root.MouthMotion)key.generatedPoints=root.MouthMotion.sanitize(key.generatedPoints);
             key.referenceTone=reference.skinTone||reference.toneTarget;key.toneTarget=reference.toneTarget;key.toneSource=root.ReferenceTone?.sample(image,key.generatedPoints)||null;
-            if(key.toneTarget&&key.toneSource){key.image=root.ReferenceTone.balance(image,key.generatedPoints,key.toneTarget,key.toneSource);key.layer=null;}
+            // El intercambio recibe una sola corrección en el compositor.
+            // Volver a blanquear aquí para luego oscurecerlo perdía matices.
+            if(key.model==='live_portrait_512'&&key.toneTarget&&key.toneSource){key.image=root.ReferenceTone.balance(image,key.generatedPoints,key.toneTarget,key.toneSource);key.layer=null;}
             const previous=this.validCache.get(bin);
             if(!previous||previous.received<key.received){this.validCache.delete(bin);this.validCache.set(bin,key);while(this.validCache.size>9)this.validCache.delete(this.validCache.keys().next().value);}
           }).catch(()=>{});

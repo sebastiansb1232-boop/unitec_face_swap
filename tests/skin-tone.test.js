@@ -1,17 +1,5 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),S=require('../public/skin-tone'),A=require('../public/face-appearance');
-const close=(a,b)=>a.forEach((v,i)=>assert.ok(Math.abs(v-b[i])<1e-6));
-test('rostro y cuerpo con distinta exposición convergen al mismo tono de referencia',()=>{
- const face=A.yuv([.65,.41,.31]),body=A.yuv([.43,.25,.18]),reference=A.yuv([.72,.55,.43]),t=S.offsets(face,body,reference);
- close(face.map((v,i)=>v+t.face[i]),reference);close(body.map((v,i)=>v+t.body[i]),reference);
-});
-test('el tono intermedio es único para ambas zonas y cámara desactiva la capa',()=>{
- const face=[.6,.01,.04],body=[.4,.03,.07],ref=[.7,-.02,.09],mixed=S.offsets(face,body,ref,'mixed',.6),expected=ref.map((v,i)=>v*.6+body[i]*.4);
- close(face.map((v,i)=>v+mixed.face[i]),expected);close(body.map((v,i)=>v+mixed.body[i]),expected);
- assert.deepEqual(S.offsets(face,body,ref,'camera'),{face:[0,0,0],body:[0,0,0]});
-});
-test('una máscara incierta o que quedó atrás del movimiento deja de teñir',()=>{
- assert.equal(S.confidence(.2),0);assert.equal(S.confidence(.64),0);assert.equal(S.confidence(.95),1);
- assert.equal(S.motionGate([.2,.3,.4],[.2,.3,.4]),1);assert.equal(S.motionGate([.2,.3,.4],[.6,.3,.4]),0);
- assert.ok(S.motionGate([.2,.3,.4],[.3,.3,.4])>0&&S.motionGate([.2,.3,.4],[.3,.3,.4])<1);
-});
+test('una frontal sobreexpuesta no blanquea la sombra del cuello',()=>{const face=A.yuv([.65,.41,.31]),body=A.yuv([.43,.25,.18]),ref=A.yuv([.98,.91,.83]);for(const mode of ['natural','reference','mixed']){const t=S.offsets(face,body,ref,mode,.85);assert.deepEqual(t.face,[0,0,0]);assert.ok(Math.abs(t.body[0])<=.035000001);assert.ok(t.body.slice(1).every(v=>Math.abs(v)<=.065000001));assert.ok(body[0]+t.body[0]<face[0]);}});
+test('la armonización del cuerpo conserva el contraste de luz y cámara desactiva la capa',()=>{const face=[.6,.01,.04],body=[.4,.03,.07],ref=[.9,-.02,.09],s=S.offsets(face,body,ref,'mixed',.6);assert.ok(Math.abs((.5+s.body[0])-(.25+s.body[0])-.25)<1e-9);assert.deepEqual(S.offsets(face,body,ref,'camera'),{face:[0,0,0],body:[0,0,0]});});
+test('una máscara incierta o que quedó atrás del movimiento deja de teñir',()=>{assert.equal(S.confidence(.2),0);assert.equal(S.confidence(.64),0);assert.equal(S.confidence(.95),1);assert.equal(S.motionGate([.2,.3,.4],[.2,.3,.4]),1);assert.equal(S.motionGate([.2,.3,.4],[.6,.3,.4]),0);assert.ok(S.motionGate([.2,.3,.4],[.3,.3,.4])>0&&S.motionGate([.2,.3,.4],[.3,.3,.4])<1);});

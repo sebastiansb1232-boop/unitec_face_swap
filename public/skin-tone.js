@@ -1,13 +1,16 @@
 /* Piel visible: segmentación aprendida, sin teñir ropa, cabello ni fondo. */
 (function(root){
  'use strict';
+ const Blend=root.PortraitBlend||(typeof require==='function'?require('./portrait-blend'):null);
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),smooth=(a,b,v)=>{const t=clamp((v-a)/(b-a),0,1);return t*t*(3-2*t);};
  const confidence=v=>smooth(.65,.94,v),motionGate=(a,b)=>1-smooth(.055,.19,Math.max(...a.map((v,i)=>Math.abs(v-b[i]))));
  function toneOffset(source,target){if(!source||!target)return [0,0,0];return target.map((v,i)=>clamp(v-source[i],i?-.16:-.48,i?.16:.48));}
- function offsets(face,body,reference,mode='reference',mix=.85){
+ function offsets(face,body,reference,mode='natural',mix=.65){
   if(!reference||mode==='camera')return {face:[0,0,0],body:[0,0,0]};
-  const camera=body||face,target=mode==='mixed'&&camera?reference.map((v,i)=>v*mix+camera[i]*(1-mix)):reference;
-  return {face:toneOffset(face||body,target),body:toneOffset(body||face,target)};
+  const camera=face||body,target=Blend.target(camera,reference,mode,mix);if(!target||!camera)return {face:[0,0,0],body:[0,0,0]};
+  // El mismo cambio de iluminación se aplica a ambas zonas. Nunca se sube
+  // una sombra del cuello hasta el brillo mediano de la cara de referencia.
+  const shift=target.map((v,i)=>v-camera[i]);return {face:[0,0,0],body:shift};
  }
  class SkinToneView{
   constructor(client){
@@ -28,8 +31,10 @@
      vec3 low=(current(uv+d)+current(uv-d)+current(uv+vec2(d.x,-d.y))+current(uv+vec2(-d.x,d.y)))*.25;
      vec3 old=(texture2D(origin,uv+d).rgb+texture2D(origin,uv-d).rgb+texture2D(origin,uv+vec2(d.x,-d.y)).rgb+texture2D(origin,uv+vec2(-d.x,d.y)).rgb)*.25;vec3 diff=abs(low-old);
      float gate=1.-smoothstep(.055,.19,max(diff.x,max(diff.y,diff.z)));
-     float alpha=max(skin.x,skin.y)*gate*age;
-     vec3 shift=mix(bodyOffset,faceOffset,skin.y/max(total,.001));
+     // Esta capa solo armoniza piel corporal. Pintar toda la clase facial
+     // producía ojos blancos y una máscara incluso mientras se esperaba IA.
+     float alpha=skin.x*(1.-smoothstep(.15,.65,skin.y))*gate*age;
+     vec3 shift=bodyOffset;
      float y=dot(color,vec3(.299,.587,.114))+shift.x;
      float u=dot(color,vec3(-.168736,-.331264,.5))+shift.y;
      float v=dot(color,vec3(.5,-.418688,-.081312))+shift.z;
@@ -60,15 +65,15 @@
    this.client.segment(image,256).then(data=>{if(epoch===this.epoch)this.accept(data,image,now);}).catch(()=>{if(epoch===this.epoch){this.failed=true;this.hide();}}).finally(()=>{this.busy=false;this.next=performance.now()+Math.max(100,Math.min(300,(performance.now()-now)*1.5));});
   }
   draw(ctx,frame,reference,settings={},now=performance.now()){
-   if(!settings.enabled||settings.colorMode==='camera'||!reference?.mean){this.hide();return false;}
+   if(!settings.enabled||settings.amount===0||settings.colorMode==='camera'||!reference?.mean){this.hide();return false;}
    if(settings.schedule!==false)this.schedule(frame,now);
    if(!this.ready){this.hide();return false;}
    // La inferencia y el arranque del Worker pueden superar un segundo. Una
    // muestra inmóvil conserva el tono; el gate espacial retira el movimiento.
    const age=1-smooth(1800,4000,now-this.sampleAt);if(age<=0){this.hide();return false;}
    const gl=this.gl;gl.useProgram(this.program);if(this.canvas.width!==frame.width||this.canvas.height!==frame.height){this.canvas.width=frame.width;this.canvas.height=frame.height;}
-   const desired=offsets(this.faceTone,this.bodyTone,reference.mean,settings.colorMode||'reference',settings.colorMix??.85),dt=this.lastDraw===null?1000:clamp(now-this.lastDraw,1,100),alpha=1-Math.exp(-dt/160);this.lastDraw=now;
-   for(let i=0;i<3;i++){this.shiftFace[i]+=(desired.face[i]-this.shiftFace[i])*alpha;this.shiftBody[i]+=(desired.body[i]-this.shiftBody[i])*alpha;}
+   const desired=offsets(this.faceTone,this.bodyTone,reference.mean,settings.colorMode||'natural',settings.colorMix??.65),dt=this.lastDraw===null?1000:clamp(now-this.lastDraw,1,100),alpha=1-Math.exp(-dt/280);this.lastDraw=now;
+   for(let i=0;i<3;i++){this.shiftFace[i]+=(desired.face[i]-this.shiftFace[i])*alpha;this.shiftBody[i]+=(desired.body[i]*clamp(settings.amount??1,0,1)-this.shiftBody[i])*alpha;}
    this.upload(0,frame.video||frame);gl.uniform1f(this.uniforms.mirror,frame.video&&frame.mirror?1:0);gl.uniform1f(this.uniforms.age,age);gl.uniform2f(this.uniforms.texel,1/this.mask.width,1/this.mask.height);gl.uniform3fv(this.uniforms.faceOffset,this.shiftFace);gl.uniform3fv(this.uniforms.bodyOffset,this.shiftBody);
    gl.viewport(0,0,frame.width,frame.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);this.canvas.hidden=false;if(ctx)ctx.drawImage(this.canvas,0,0);return true;
   }

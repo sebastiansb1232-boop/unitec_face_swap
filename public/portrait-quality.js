@@ -72,7 +72,15 @@
   }
   function textureTransition(previous,next){
     if(!previous||previous===next||!previous.registered||!next.registered)return 0;
-    if(previous.stableIdentity||next.stableIdentity)return 0;
+    if(previous.stableIdentity||next.stableIdentity){
+      const swap=k=>/^(hyperswap|inswapper)/.test(k.model||'');
+      if(!swap(previous)||!swap(next)||previous.referenceId!==next.referenceId)return 0;
+      if(Math.abs((previous.yaw||0)-(next.yaw||0))>.045||Math.abs((previous.pitch||0)-(next.pitch||0))>.045)return 0;
+      if(previous.expression&&next.expression&&previous.expression.some((v,i)=>Math.abs(v-next.expression[i])>.045))return 0;
+      if(previous.generatedPoints&&next.generatedPoints&&expression(previous.generatedPoints).some((v,i)=>Math.abs(v-expression(next.generatedPoints)[i])>.06))return 0;
+      if(previous.toneSource&&next.toneSource&&Math.abs(previous.toneSource.mean[0]-next.toneSource.mean[0])>.025)return 0;
+      return 80;
+    }
     if(Math.abs((previous.yaw||0)-(next.yaw||0))>.075)return 0;
     const a=previous.expression,b=next.expression;
     if(a&&b&&a.some((v,i)=>Math.abs(v-b[i])>.07))return 0;
@@ -128,9 +136,10 @@
     return desired.map((p,i)=>{const w=smooth(.005,.14,edge[i]);return {...p,x:live[i].x+(p.x-live[i].x)*w,y:live[i].y+(p.y-live[i].y)*w,z:(live[i].z||0)+((p.z||0)-(live[i].z||0))*w};});
   }
   class IdentityShape{
-    reset(){this.key=null;this.uv=null;this.profile=null;this.offsets=null;this.time=null;this.identityKey=null;this.base3D=null;this.reference3D=null;this.offsets3D=null;this.calibrationCount=0;this.calibrationStamp=null;this.morphStamp=null;this.morphLocal=null;this.morphSettled=false;this.morphAmount=null;this.generatedKey=null;this.generatedShape=null;this.generatedBase=null;this.referenceShapes=null;this.screenLocal=null;this.morphTexture=null;}
+    reset(){this.key=null;this.uv=null;this.profile=null;this.offsets=null;this.time=null;this.identityKey=null;this.base3D=null;this.reference3D=null;this.offsets3D=null;this.calibrationCount=0;this.calibrationStamp=null;this.morphStamp=null;this.morphLocal=null;this.morphSettled=false;this.morphAmount=null;this.generatedKey=null;this.generatedShape=null;this.generatedBase=null;this.referenceShapes=null;this.screenLocal=null;this.morphTexture=null;this.swapDeltas=null;this.swapOffsets=null;this.swapSafe=null;this.swapStamp=null;this.swapKey=null;this.swapIdentity=null;}
     constructor(){this.reset();}
     apply(live,key,amount,now,triangles){
+      if(key.generatedPoints&&/^(hyperswap|inswapper)/.test(key.model||'')&&key.inputUV)return this.applySwap(live,key,amount,now,triangles);
       if(Pose&&key.referenceViews?.length&&key.sourcePoints)return this.apply3D(live,key,amount,now,triangles);
       if(this.key!==key||this.uv!==key.uv){
         const pixel=uv=>uv.map(p=>({x:p.x*key.input.width,y:p.y*key.input.height}));
@@ -146,6 +155,31 @@
         return {...p,x:p.x+b.scale*(o.x*b.x.x+o.y*b.y.x),y:p.y+b.scale*(o.x*b.x.y+o.y*b.y.y)};
       });
       return constrainGeometry(live.slice(0,468),this.allowContour===false?protectSilhouette(live,desired,b.scale):desired,triangles);
+    }
+    applySwap(live,key,amount,now,triangles){
+      // Medir el cambio neuronal en el mismo marco que su fotograma de
+      // entrada. Normalizar entrada y salida con poses distintas congelaba
+      // facciones y podía mover ojos/nariz dos veces al girar.
+      if(!this.swapDeltas)this.swapDeltas=new WeakMap();
+      if(!this.swapDeltas.has(key)){
+        const input=key.inputUV.slice(0,468).map(p=>({x:p.x*key.textureW,y:p.y*key.textureH})),b=A.basis(input),generated=key.generatedPoints;
+        this.swapDeltas.set(key,input.map((p,i)=>{const dx=generated[i].x-p.x,dy=generated[i].y-p.y;return {x:(dx*b.x.x+dy*b.x.y)/b.scale,y:(dx*b.y.x+dy*b.y.y)/b.scale};}));
+      }
+      const b=A.basis(live),desired=this.swapDeltas.get(key),stamp=live.stamp??now,strength=clamp(amount,0,1),closed=Mouth.isClosed(live),update=this.swapStamp!==stamp||this.swapKey!==key||this.swapAmount!==strength||this.swapContour!==this.allowContour;
+      if(!this.swapOffsets||this.swapIdentity!==key.referenceId){this.swapOffsets=desired.map(()=>({x:0,y:0}));this.swapTime=null;this.swapIdentity=key.referenceId;}
+      if(update){
+        const dt=this.swapTime===null?16:clamp(now-this.swapTime,1,100);this.swapTime=now;
+        const proposal=live.slice(0,468).map((p,i)=>{
+          const fast=eyeAndLip.has(i),limit=fast ? .035 : .085,weight=1-Math.exp(-dt/(fast?25:95)),o=this.swapOffsets[i];
+          for(const axis of ['x','y'])o[axis]+=(clamp(desired[i][axis],-limit,limit)*strength-o[axis])*weight;
+          return {...p,x:p.x+b.scale*(o.x*b.x.x+o.y*b.y.x),y:p.y+b.scale*(o.x*b.x.y+o.y*b.y.y)};
+        });
+        const constrained=constrainGeometry(live.slice(0,468),this.allowContour===false?protectSilhouette(live,proposal,b.scale):proposal,triangles),safe=closed?Mouth.seal(constrained):constrained;
+        this.swapSafe=safe.map((p,i)=>{const dx=p.x-live[i].x,dy=p.y-live[i].y;return {x:(dx*b.x.x+dy*b.x.y)/b.scale,y:(dx*b.y.x+dy*b.y.y)/b.scale};});
+        this.swapStamp=stamp;this.swapKey=key;this.swapAmount=strength;this.swapContour=this.allowContour;
+      }
+      if(strength===0)return closed?Mouth.seal(live.slice(0,468)):live.slice(0,468).map(p=>({...p}));
+      return live.slice(0,468).map((p,i)=>{const o=this.swapSafe[i];return {...p,x:p.x+b.scale*(o.x*b.x.x+o.y*b.y.x),y:p.y+b.scale*(o.x*b.x.y+o.y*b.y.y)};});
     }
     apply3D(live,key,amount,now,triangles){
       const width=key.width||1,b=Pose.basis(live,width),identity=key.referenceId||key.referenceViews,stamp=live.stamp??now;

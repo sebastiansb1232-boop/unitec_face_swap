@@ -1,6 +1,6 @@
-# IA local en Another Face 1.14.0
+# IA local en Another Face 1.15.0
 
-Intercambio neuronal modifica la cámara con la identidad de referencia. Prefiere HyperSwap 1C 256 completo y después InSwapper 128. LivePortrait 512 anima una fotografía y queda como una opción explícita, distinta del intercambio. El tono de referencia se aplica a rostro y piel visible del cuerpo mediante segmentación local. La boca generada se conserva completa por defecto; se corrigen el cierre y la correspondencia de puntos que siguen la lengua. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render, y los límites comprobados.
+Intercambio neuronal modifica la cámara con HyperSwap 256 o InSwapper 128. Esta entrega conserva iluminación natural, limita el cambio de exposición del cuerpo, mejora la entrada de seguimiento con ROI y añade superficie curva y compensación local de ojos/boca. No añade pesos. LivePortrait sigue siendo una opción fotográfica explícita. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar tu instalación y Render.
 
 ## Primera instalación en Windows
 
@@ -78,10 +78,10 @@ El proveedor admite auto, cuda, dml y cpu; los hilos, de 1 a 8. No se detecta au
 
 ## Flujo de procesamiento
 
-1. La foto frontal y hasta dos perfiles se analizan en el navegador. La cámara utiliza Face Landmarker en un Worker, modo VIDEO; el registro de imágenes usa modo IMAGE.
+1. La foto frontal y hasta dos perfiles se analizan en el navegador. La cámara utiliza Face Landmarker en un Worker sobre recortes en modo IMAGE; la estabilización y predicción temporal se mantienen aparte. El registro de imágenes también usa IMAGE.
 2. Avatar rápido selecciona la fotografía adecuada y la reproyecta mediante geometría facial de profundidad estimada. No llama al generador ni transmite video a la PC.
 3. En Neuronal, el cliente envía un recorte sin espejo y los puntos de ese mismo fotograma. ArcFace combina las referencias una vez. LivePortrait precalcula además las características de apariencia por vista.
-4. El motor devuelve una textura alineada y la transformación. El navegador registra su malla en paralelo, ajusta las proporciones y la proyecta sobre el seguimiento actual. El rostro no espera a una respuesta nueva para moverse.
+4. El motor devuelve una textura alineada y la transformación. El navegador registra su malla en paralelo, ajusta las proporciones y la proyecta sobre el seguimiento actual. El rostro sigue la cámara entre respuestas y la compensación local actualiza diferencias de ojos y boca, sin contarlas como generaciones nuevas.
 5. Se limita la corrección de luz y se evita volver a introducir la textura de la piel original. El cabello conserva su apariencia de cámara en intercambio; la piel visible de cuello, orejas, brazos y manos se ajusta al tono elegido cuando la segmentación la reconoce. Ropa y fondo se conservan.
 6. Hay una petición neuronal en vuelo. Las muestras intermedias se descartan; las de otra referencia no reaparecen después de cambiarla o apagar.
 
@@ -120,6 +120,6 @@ npm.cmd test
 .\.venv-ai\Scripts\python.exe -m unittest discover -s local-ai -p "test_*.py" -v
 ```
 
-La entrega pasa 107 pruebas JavaScript y 50 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
+Las pruebas de esta entrega incluyen ROI, exposición acotada, superficie curva y gestos sobre cámara, además de las del motor Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
 
 Los pesos se descargan explícitamente con revisión, tamaño y SHA-256 en `local-ai/models.json`; no se incluyen en el ZIP. ArcFace/InSwapper son de investigación no comercial; HyperSwap indica ResearchRAIL-MS. LaMa indica Apache 2.0. El código original LivePortrait es MIT, con condiciones separadas para componentes de terceros. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
