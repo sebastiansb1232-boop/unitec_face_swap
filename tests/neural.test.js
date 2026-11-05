@@ -12,6 +12,21 @@ function client(fetch,onDelivered,fitGenerated,fastAlignment=false){
 const frame={width:640,height:480},points=Array.from({length:478},(_,i)=>({x:300+40*Math.sin(i),y:200+60*Math.cos(i)}));
 points[33]={x:260,y:180};points[263]={x:340,y:180};points[10]={x:300,y:120};points[152]={x:300,y:290};points[1]={x:300,y:215};points[61]={x:280,y:250};points[291]={x:320,y:250};points[13]={x:300,y:249};points[14]={x:300,y:251};
 const ref={image:{width:640,height:480},points};
+test('los ajustes no cancelan ni duplican una inferencia que sigue trabajando',async()=>{
+ let release,signal,frames=0;const {n}=client((url,options)=>url.endsWith('/reference')?Promise.resolve(response({reference_id:'id'})):(frames++,signal=options.signal,new Promise(r=>release=r)));
+ n.submit(frame,points,ref,{},[]);await tick();const driver=n.driverId;n.reset(true);assert.equal(signal.aborted,false);assert.equal(n.driverId,driver);assert.equal(n.submit(frame,points,ref,{},[]),false);release(response({image:'stale',ms:100}));await tick();assert.equal(frames,1);assert.equal(n.last,null);
+});
+test('un motor ocupado espacia reintentos sin acumular fotogramas',async()=>{
+ const {n}=client(async url=>url.endsWith('/reference')?response({reference_id:'id'}):{ok:false,status:429,json:async()=>({error:'ocupado',retry_ms:500})});const waits=[];
+ for(let i=0;i<3;i++){n.next=0;n.submit(frame,points,ref,{},[]);await tick();waits.push(n.next-performance.now());assert.equal(n.busy,false);}assert.ok(waits[0]>450&&waits[1]>950&&waits[2]>1950);
+});
+test('la calibración requiere muestras neutrales distintas y conserva el conductor al ajustar',()=>{
+ const {n,scope}=client(async()=>response({}));scope.FacePose=require('../public/face-pose');const p=points.map(q=>({...q,z:0}));p[133]={x:290,y:180,z:0};p[362]={x:310,y:180,z:0};for(const [t,d,x] of [[159,145,275],[386,374,325]]){p[t]={x,y:175,z:0};p[d]={x,y:185,z:0};}
+ assert.equal(n.submit(frame,p,ref,{},[],{capturedAt:1}),false);assert.equal(n.submit(frame,p,ref,{},[],{capturedAt:1}),false);assert.equal(n.neutralSamples,1);const id=n.driverId;n.reset(true);assert.equal(n.driverId,id);assert.equal(n.neutralSamples,1);n.resetDriver();assert.equal(n.driverId,id+1);assert.equal(n.neutralSamples,0);
+});
+test('un gesto nuevo no sustituye toda la textura neuronal por una fotografía',()=>{
+ const {n,scope}=client(async()=>response({}));scope.FacePose={basis:()=>({yaw:0,pitch:0})};const key={registered:true,received:1000,yaw:0,expression:[0,0,0],requestMs:20000};n.last=key;n.validCache.set(0,key);assert.equal(n.select(points,640,2000,ref,480),key);
+});
 test('neural: un solo fotograma en vuelo y la referencia se reutiliza',async()=>{
   let refs=0,frames=0;const {n,completed}=client(async url=>{if(url.endsWith('/reference')){refs++;return response({reference_id:'test-reference'});}frames++;return response({image:'result',ms:20,provider:'CPUExecutionProvider'});});
   const raw=[{x:.2,y:.4,z:0}];n.submit(frame,points,ref,{},raw);n.submit(frame,points,ref,{},raw);

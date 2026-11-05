@@ -11,7 +11,7 @@ let comparing = false, analyzingReference=false, inference=null, handleResultsCa
 let portraitEngine='neural',cameraDevice='',resolutionLimit=0;
 let neuralView=null,trackingStarted=0,lastTrackStarted=0,lastTrackVideoTime=-1,lastMetricUpdate=0,lastNeuralDraw=0,trackerMs=0,neuralMessage='',neuralSample=null,lastSubmittedSample=null;
 const neuralMotion=new NeuralMotion(),neuralTracker=new NeuralTracker(),outputTracker=new NeuralTracker('image'),liveStabilizer=new FacePose.Stabilizer(),referenceViews=new ReferenceViews(),viewTimes=[],trackTimes=[];
-let outputTrackingBusy=false;
+let outputTrackingBusy=false,faceLostAt=0,faceLossReset=false;
 const neuralInput=document.createElement('canvas');
 let neuralFrame=document.createElement('canvas'),neuralCapture=document.createElement('canvas');
 const referenceFace = new ReferenceFace(text => { const label=$('#reference-status'); if(label.textContent!==text) label.textContent=text; });
@@ -70,11 +70,11 @@ async function getModel() {
       // Coordenadas exactas del fotograma: no inventar puntos intermedios ni reutilizar otra cara.
       points = rawPoints?.map(p => ({ x:p.x*overlay.width, y:p.y*overlay.height, z:p.z })) || null;
       $('#face-status-overlay').textContent = points ? 'Rostro detectado · Seguimiento activo' : 'Mira a la cámara y busca buena luz';
-      if (!points) {referenceFace.lost();neuralPortrait.reset(true);}
+      if(!points){referenceFace.lost();neuralSample=null;if(!faceLostAt)faceLostAt=performance.now();if(!faceLossReset&&performance.now()-faceLostAt>650){faceLossReset=true;neuralPortrait.reset(true);neuralPortrait.resetDriver();}}else{faceLostAt=0;faceLossReset=false;}
       if(portraitEngine==='neural'&&currentFilter==='retrato'){
         if(!points){neuralMotion.reset();neuralView?.reset();return;}
         const now=performance.now(),stable=liveStabilizer.filter(points,overlay.width,referenceFace.stability,now);
-        trackerMs=now-trackingStarted;neuralMotion.update(stable,trackingStarted||now);
+        trackerMs=now-trackingStarted;neuralMotion.update(stable,trackingStarted||now,overlay.width);
         if(!comparing&&!analyzingReference&&referenceFace.ready){
           if(!neuralPortrait.photoOnly)[neuralFrame,neuralCapture]=[neuralCapture,neuralFrame];
           neuralSample={frame:neuralFrame,points:stable,raw:rawPoints,reference:referenceViews.reference||referenceFace.choose(points),time:trackingStarted||now,generation};submitNeural();
@@ -286,7 +286,7 @@ function drawNeuralResult(capture=false){
   const result=neuralPortrait.select(current,overlay.width,performance.now(),referenceViews.reference||referenceFace.choose(current),overlay.height);
   if(!result||!current||result.width!==overlay.width||result.height!==overlay.height||!neuralView){referenceFace.rendered=false;neuralView?.hide();return;}
   const source=capture?frame:{width:overlay.width,height:overlay.height,video,mirror:facing==='user'};
-  referenceFace.rendered=neuralView.draw(capture?ctx:null,source,current,result,{identityLock:true,shape:referenceFace.shape,opacity:referenceFace.opacity,eyes:referenceFace.eyes,mouth:referenceFace.mouth,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,light:$('#reference-light')?.checked===false?0:.35},performance.now());
+  referenceFace.rendered=neuralView.draw(capture?ctx:null,source,current,result,{identityLock:true,shape:referenceFace.shape,opacity:referenceFace.opacity,eyes:referenceFace.eyes,mouth:referenceFace.mouth,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,light:referenceViews.reference?.toneTarget?0:$('#reference-light')?.checked===false?0:.35},performance.now());
   const status=referenceFace.rendered?(result.referencePhoto?(neuralPortrait.photoOnly?'Avatar fotográfico activo · ':'Referencia en vivo mientras se valida la IA · ')+({front:'Frontal',left:'Perfil 1',right:'Perfil 2'}[result.activeView]||'Referencia')+' · Gestos en vivo':result.registered?'Retrato neuronal activo · Ajuste refinado y gestos en vivo':'Retrato neuronal activo · Gestos en vivo'):'Ajustando el retrato a tu posición…';
   if($('#reference-status').textContent!==status)$('#reference-status').textContent=status;
 }
@@ -402,6 +402,7 @@ $('#retry-upload').addEventListener('click',uploadPhoto);
 
 $('#reference-shape').addEventListener('input',event=>{referenceFace.shape=Number(event.target.value)/100;$('#reference-shape-value').textContent=event.target.value+'%';referenceFace.rendered=false;});
 $('#reference-opacity').addEventListener('input',event=>{referenceFace.opacity=Number(event.target.value)/100;$('#reference-opacity-value').textContent=event.target.value+'%';referenceFace.rendered=false;});
+$('#reference-color-lock').addEventListener('change',event=>{referenceViews.setColorLocked(event.target.checked);referenceFace.lockTone=event.target.checked;resetIdentity();updateReferenceViews();});
 $('#reference-calibrate').addEventListener('click',()=>{referenceFace.reset();resetIdentity();$('#reference-status').textContent='Mira de frente, abre los ojos y relaja la boca para calibrar.';});
 $('#reference-identity').addEventListener('input',event=>{$('#reference-identity-value').textContent=event.target.value+'%';neuralPortrait.reset(true);neuralView?.reset();});
 
@@ -414,6 +415,7 @@ for (const [control,property] of [['softness','softness'],['stability','stabilit
 }
 
 function updateReferenceViews(){
+  $('#reference-light').disabled=referenceViews.colorLocked;
   for(const side of ['left','right']){
     const view=referenceViews.entries.get(side),preview=$('#reference-'+side+'-preview');preview.hidden=!view;
     if(view){preview.src=view.image.toDataURL('image/jpeg',.8);$('#reference-'+side+'-label').textContent='Cambiar foto';}else{preview.removeAttribute('src');$('#reference-'+side+'-label').textContent='Añadir foto';}

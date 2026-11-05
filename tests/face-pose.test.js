@@ -9,6 +9,17 @@ function view(p,yaw=0,mirror=false){
  const c=Math.cos(yaw),s=Math.sin(yaw),width=600;
  return p.map(q=>({x:mirror?width-(300+150*(q.x*c+q.z*s)):300+150*(q.x*c+q.z*s),y:150+150*q.y,z:150*(-q.x*s+q.z*c)/width}));
 }
+test('la silueta incluye una nariz que sobresale y el anillo cubre su contorno anterior',()=>{
+ const p=view(canonical(),.9);p[1].x=Math.min(...p.map(q=>q.x))-25;const ids=Q.silhouetteIds(p);assert.ok(ids.includes(1));const dest=p.map(q=>({...q}));dest[1].x+=15;const skirt=Q.silhouetteSkirt(p,dest,600,ids),nose=skirt.find(q=>q.id===1);assert.ok(nose.source.x<p[1].x);assert.deepEqual(nose.source,nose.destination);assert.ok(Q.silhouetteEdges(dest,Q.silhouetteIds(dest),150).every(Number.isFinite));
+});
+test('una textura neuronal abierta conserva el gesto capturado sin aplicarlo dos veces',()=>{
+ const p=canonical();p[13].y=.75;p[14].y=.95;const live=view(p),key={width:600,textureW:600,sourcePoints:live,generatedPoints:live,referenceViews:[{side:'front',points:view(canonical()),width:600}],referenceId:'generated-mouth'},shape=new Q.IdentityShape();let out;
+ for(let i=0;i<50;i++)out=shape.apply(live,key,1,i*33,[]);assert.ok(Math.abs(out[14].y-out[13].y-(live[14].y-live[13].y))<.01);
+});
+test('la predicción angular mantiene distancias 3D en un giro',()=>{
+ const {NeuralMotion}=require('../public/neural-motion'),m=new NeuralMotion(),p=canonical();m.update(view(p,.1),0,600);m.update(view(p,.2),100,600);const out=m.predict(130),actual=m.current.points,d=(v,a,b)=>Math.hypot(v[a].x-v[b].x,v[a].y-v[b].y,(v[a].z-v[b].z)*600);
+ for(const [a,b] of [[33,263],[13,14],[1,152],[61,291]])assert.ok(Math.abs(d(out,a,b)-d(actual,a,b))<1e-6);
+});
 test('el marco 3D conserva proporciones en ambos perfiles y bajo espejo',()=>{
  const p=canonical(),expected=P.normalize(view(p),600);
  for(const yaw of [-1,-.6,.6,1])for(const mirror of [false,true]){

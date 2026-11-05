@@ -29,10 +29,13 @@ def transform_motion(motion,angles=None,expression=None):
     translation=motion['translation'].copy().reshape(1,1,3);translation[:,:,2]=0
     return (points+translation).astype(np.float32)
 
-def expression_transfer(source,driver,neutral,strength=.65):
+def expression_transfer(source,driver,neutral,strength=.65,yaw=0):
     # Mantener anatomía y expresión base del retrato; trasladar solo el gesto.
     amplitude=1-.22*float(strength)
-    return source+np.clip(driver-neutral,-.18,.18)*amplitude
+    delta=driver-neutral
+    limit=.09*(1-.35*np.clip((abs(float(yaw))-35)/40,0,1))
+    norm=np.linalg.norm(delta,axis=-1,keepdims=True)
+    return source+delta*(limit/np.sqrt(norm*norm+limit*limit))*amplitude
 
 def choose_view(views,yaw,previous=None,hysteresis=9):
     best=min(range(len(views)),key=lambda i:abs(float(views[i]['yaw'])-yaw))
@@ -86,7 +89,7 @@ class PortraitAnimator:
         if state['neutral'] is None or state['driver_id']!=driver_id:
             state['neutral']={k:v.copy() for k,v in driving.items()};state['driver_id']=driver_id
         index=choose_view(state['views'],float(driving['yaw']),state['active']);state['active']=index;source=state['views'][index]
-        expression=expression_transfer(source['motion']['expression'],driving['expression'],state['neutral']['expression'],strength)
+        expression=expression_transfer(source['motion']['expression'],driving['expression'],state['neutral']['expression'],strength,float(driving['yaw']))
         angles=[np.clip(float(driving[k]),-limit,limit) for k,limit in [('pitch',40),('yaw',80),('roll',50)]]
         target=transform_motion(source['motion'],angles,expression)
         stitched=self.sessions['stitch'].run(None,{'source':target,'target':source['points']})[0]

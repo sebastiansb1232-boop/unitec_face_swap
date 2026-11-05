@@ -123,7 +123,7 @@
     return live.map(p=>({...p}));
   }
   class IdentityShape{
-    reset(){this.key=null;this.uv=null;this.profile=null;this.offsets=null;this.time=null;this.identityKey=null;this.base3D=null;this.reference3D=null;this.offsets3D=null;this.calibrationCount=0;this.calibrationStamp=null;this.morphStamp=null;this.morphLocal=null;this.morphSettled=false;this.morphAmount=null;}
+    reset(){this.key=null;this.uv=null;this.profile=null;this.offsets=null;this.time=null;this.identityKey=null;this.base3D=null;this.reference3D=null;this.offsets3D=null;this.calibrationCount=0;this.calibrationStamp=null;this.morphStamp=null;this.morphLocal=null;this.morphSettled=false;this.morphAmount=null;this.generatedKey=null;this.generatedShape=null;this.generatedBase=null;this.referenceShapes=null;this.screenLocal=null;this.morphTexture=null;}
     constructor(){this.reset();}
     apply(live,key,amount,now,triangles){
       if(Pose&&key.referenceViews?.length&&key.sourcePoints)return this.apply3D(live,key,amount,now,triangles);
@@ -144,7 +144,7 @@
     }
     apply3D(live,key,amount,now,triangles){
       const width=key.width||1,b=Pose.basis(live,width),identity=key.referenceId||key.referenceViews,stamp=live.stamp??now;
-      if(this.identityKey===identity&&this.morphStamp===stamp&&this.morphAmount===amount&&this.morphSettled&&this.morphLocal)return Pose.project(this.morphLocal,b);
+      if(this.identityKey===identity&&this.morphTexture===key&&this.morphStamp===stamp&&this.morphAmount===amount&&this.morphSettled&&this.screenLocal)return Pose.project(this.screenLocal,b);
       const local=Pose.normalize(live,width,b);
       if(this.identityKey!==identity){
         this.identityKey=identity;this.referenceShapes=key.referenceViews.map(v=>({side:v.side,yaw:Pose.basis(v.points,v.width||1).yaw,shape:Pose.normalize(v.points,v.width||1)}));this.reference3D=this.referenceShapes[0]?.shape;this.base3D=Pose.normalize(key.sourcePoints,width);this.offsets3D=local.map(()=>({x:0,y:0,z:0}));this.calibrationCount=0;this.calibrationStamp=null;this.time=null;
@@ -157,17 +157,21 @@
       }
       const selected=key.referencePhoto?this.referenceShapes.find(v=>v.side===key.activeView):null;
       const source=selected||this.referenceShapes.reduce((a,c)=>Math.abs(a.yaw-b.yaw)<Math.abs(c.yaw-b.yaw)?a:c);
-      const reference=source.shape,base=this.base3D,desired=reference.map(p=>({...p}));
+      if(key.generatedPoints&&this.generatedKey!==key){this.generatedKey=key;this.generatedShape=Pose.normalize(key.generatedPoints,key.textureW);this.generatedBase=Pose.normalize(key.sourcePoints,width);}
+      const reference=key.generatedPoints?this.generatedShape:source.shape,base=key.generatedPoints?this.generatedBase:this.base3D,desired=reference.map(p=>({...p}));
       // La geometría de identidad procede de la vista correspondiente. Los
       // residuos de todos los vértices no son gestos: en perfil incluían error
       // de profundidad y desplazaban boca, nariz y ojos por segunda vez.
       for(const [ids,a,c,t,d] of [[A.EYES[0],33,133,159,145],[A.EYES[1],263,362,386,374]]){
         const center=p=>({x:(p[a].x+p[c].x)/2,y:(p[a].y+p[c].y)/2,z:(p[a].z+p[c].z)/2});
-        const refCenter=center(reference),open=clamp(Math.abs(local[t].y-local[d].y)/Math.max(Math.abs(base[t].y-base[d].y),.015),.03,1.8);
-        for(const id of ids)desired[id].y=refCenter.y+(reference[id].y-refCenter.y)*open;
+        const refCenter=center(reference),refHeight=Math.max(Math.abs(reference[t].y-reference[d].y),.004),baseHeight=Math.max(Math.abs(base[t].y-base[d].y),.015);
+        const open=key.generatedPoints?clamp((refHeight+clamp(Math.abs(local[t].y-local[d].y)-baseHeight,-.12,.08))/refHeight,.025,30):clamp(Math.abs(local[t].y-local[d].y)/baseHeight,.025,1.35);
+        const photoCenter=center(source.shape),neutralHeight=Math.max(Math.abs(this.base3D[t].y-this.base3D[d].y),.015),expectedRatio=clamp(Math.abs(local[t].y-local[d].y)/neutralHeight,.025,1.35),photoHeight=Math.abs(source.shape[t].y-source.shape[d].y)*expectedRatio,assist=key.generatedPoints?smooth(.025,.07,photoHeight-refHeight):0;
+        for(const id of ids){const native=refCenter.y+(reference[id].y-refCenter.y)*open,photographic=refCenter.y+(source.shape[id].y-photoCenter.y)*expectedRatio;desired[id].y=native+(photographic-native)*assist;}
       }
       const span=p=>Math.max(Pose.length(Pose.sub(p[61],p[291])),.03),opening=p=>Math.abs(p[13].y-p[14].y)/span(p);
-      const mouthCenter={x:(reference[61].x+reference[291].x)/2,y:(reference[13].y+reference[14].y)/2},mouthDelta=clamp(opening(local)-opening(base),-.2,.45),smile=clamp(span(local)/span(base),.82,1.18),inner=new Set(HOLES[2]);
+      const maxOpen=Math.abs(b.yaw)>.65?.20:.34,rawDelta=opening(local)-opening(base);
+      const mouthCenter={x:(reference[61].x+reference[291].x)/2,y:(reference[13].y+reference[14].y)/2},mouthDelta=Math.max(-opening(reference)*.9,maxOpen*Math.tanh(rawDelta/maxOpen)),smile=clamp(span(local)/span(base),.9,1.1),inner=new Set(HOLES[2]);
       for(const id of A.LIPS){
         desired[id].x=mouthCenter.x+(reference[id].x-mouthCenter.x)*smile;
         const direction=Math.sign(reference[id].y-mouthCenter.y);
@@ -185,8 +189,8 @@
         for(const axis of ['x','y','z']){const delta=clamp(desired[i][axis]-p[axis],-limits[axis],limits[axis])*strength-offset[axis];error=Math.max(error,Math.abs(delta));offset[axis]+=delta*alpha;value[axis]=p[axis]+offset[axis];}
         return value;
       });
-      this.morphLocal=constrainMorph3D(local,output,triangles);this.morphStamp=stamp;this.morphAmount=amount;this.morphSettled=error<.0001;
-      return Pose.project(this.morphLocal,b);
+      this.morphLocal=constrainMorph3D(local,output,triangles);this.morphStamp=stamp;this.morphAmount=amount;this.morphSettled=error<.0001;this.morphTexture=key;
+      const projected=Pose.project(this.morphLocal,b),safe=constrainGeometry(live.slice(0,468),projected,triangles),out=safe.map((p,i)=>({...p,z:projected[i].z}));this.screenLocal=Pose.normalize(out,width,b);return out;
     }
   }
   function constrainMorph3D(live,desired,triangles){
@@ -207,6 +211,16 @@
       return {source:{x:p.x+dx/length*reach,y:p.y+dy/length*reach},destination:{x:p.x+dx/length*reach,y:p.y+dy/length*reach},innerSource:p,innerDestination:destination[id]};
     });
   }
-  const api={OVAL,HOLES,smooth,ringDistances,contourDistances,featureRegions,featureAmounts,anchorGeometry,registeredUV,textureTransition,expression,identityProfile,constrainGeometry,constrainMorph3D,IdentityShape,contourSkirt,alignedUV};
+  function silhouetteIds(points){
+    const ids=points.slice(0,468).map((p,i)=>i).sort((a,b)=>points[a].x-points[b].x||points[a].y-points[b].y),cross=(a,b,c)=>(points[b].x-points[a].x)*(points[c].y-points[a].y)-(points[b].y-points[a].y)*(points[c].x-points[a].x),half=order=>{const hull=[];for(const id of order){while(hull.length>1&&cross(hull.at(-2),hull.at(-1),id)<=0)hull.pop();hull.push(id);}return hull.slice(0,-1);};return [...half(ids),...half(ids.slice().reverse())];
+  }
+  function silhouetteSkirt(live,destination,width,ids=silhouetteIds(live)){
+    const b=basis(live),scale=Pose?Pose.basis(live,width).scale:b.scale,reach=Math.max(b.scale,scale*.8)*.65;
+    return ids.map(id=>{const p=live[id],d=destination[id],dx=p.x-b.origin.x,dy=p.y-b.origin.y,l=Math.max(Math.hypot(dx,dy),1),extra=reach+distance(p,d);return {id,source:{x:p.x+dx/l*extra,y:p.y+dy/l*extra},destination:{x:p.x+dx/l*extra,y:p.y+dy/l*extra}};});
+  }
+  function silhouetteEdges(points,ids,scale){
+    return points.slice(0,468).map(p=>{let nearest=Infinity;for(let k=0;k<ids.length;k++){const a=points[ids[k]],b=points[ids[(k+1)%ids.length]],dx=b.x-a.x,dy=b.y-a.y,t=clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/Math.max(dx*dx+dy*dy,1e-8),0,1);nearest=Math.min(nearest,Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy));}return nearest/Math.max(scale,1);});
+  }
+  const api={OVAL,HOLES,smooth,ringDistances,contourDistances,featureRegions,featureAmounts,anchorGeometry,registeredUV,textureTransition,expression,identityProfile,constrainGeometry,constrainMorph3D,IdentityShape,contourSkirt,alignedUV,silhouetteIds,silhouetteSkirt,silhouetteEdges};
   root.PortraitQuality=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -2,12 +2,13 @@
 (function(root){
   'use strict';
   class NeuralPortrait{
-    constructor(status,onResult,fitGenerated){this.status=status;this.onResult=onResult;this.fitGenerated=fitGenerated;this.epoch=0;this.enabled=false;this.busy=false;this.next=0;this.reference=null;this.token=null;this.last=null;this.arrivals=[];this.faceSize=384;this.maxFps=60;this.cache=new Map();this.validCache=new Map();this.photoCache=new Map();}
-    reset(keepReference=false){this.epoch++;this.abort?.abort();this.last=null;this.cache.clear();this.validCache.clear();this.photoCache.clear();this.photoIdentity=null;this.arrivals=[];this.fps=0;this.next=0;if(!keepReference){this.reference=null;this.token=null;this.invalidReference=null;}}
-    async available(){try{const r=await fetch('/api/neural/status',{signal:AbortSignal.timeout(8000)});this.engineInfo=await r.json();if((this.engineInfo.proxy_protocol||0)<5){this.engineInfo.error='Actualiza el código de Render a 1.9 y vuelve a cargar la página.';return false;}if(this.engineInfo.ready&&((this.engineInfo.render_protocol||0)<5||!this.engineInfo.patch_output)){this.engineInfo.error='Actualiza y reinicia el motor de la PC con la entrega 1.9. Render ya está actualizado.';return false;}return r.ok&&this.engineInfo.ready===true;}catch{return false;}}
+    constructor(status,onResult,fitGenerated){this.status=status;this.onResult=onResult;this.fitGenerated=fitGenerated;this.epoch=0;this.driverId=0;this.neutralSamples=0;this.enabled=false;this.busy=false;this.next=0;this.reference=null;this.token=null;this.last=null;this.arrivals=[];this.faceSize=384;this.maxFps=60;this.cache=new Map();this.validCache=new Map();this.photoCache=new Map();}
+    resetDriver(){this.driverId++;this.neutralSamples=0;this.neutralStamp=null;}
+    reset(keepReference=false){this.epoch++;if(!keepReference){this.abort?.abort();this.resetDriver();}this.last=null;this.cache.clear();this.validCache.clear();this.photoCache.clear();this.photoIdentity=null;this.arrivals=[];this.fps=0;this.next=0;if(!keepReference){this.reference=null;this.token=null;this.invalidReference=null;}}
+    async available(){try{const r=await fetch('/api/neural/status',{signal:AbortSignal.timeout(8000)});this.engineInfo=await r.json();if((this.engineInfo.proxy_protocol||0)<5){this.engineInfo.error='Actualiza el código de Render a 1.10 y vuelve a cargar la página.';return false;}if(this.engineInfo.ready&&((this.engineInfo.render_protocol||0)<5||!this.engineInfo.patch_output)){this.engineInfo.error='Actualiza y reinicia el motor de la PC con la entrega 1.10. Render ya está actualizado.';return false;}return r.ok&&this.engineInfo.ready===true;}catch{return false;}}
     async request(path,body,signal){
       const r=await fetch('/api/neural/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
-      const data=await r.json();if(!r.ok){const error=new Error(data.error||'No se pudo procesar el fotograma.');error.status=r.status;error.action=path;throw error;}return data;
+      const data=await r.json();if(!r.ok){const error=new Error(data.error||'No se pudo procesar el fotograma.');error.status=r.status;error.action=path;error.retryMs=data.retry_ms;throw error;}return data;
     }
     encodeReference(view){
       // Recortar antes de reducir conserva detalle facial en fotos de cuerpo.
@@ -36,18 +37,24 @@
       if(!root.FacePose||!points)return this.last.registered?this.last:photo;
       const pose=root.FacePose.basis(points,width),expression=root.PortraitQuality.expression(points);let best=null,score=Infinity;
       for(const key of this.validCache.values()){
-        if(!key.registered||now-key.received>8000)continue;
+        if(!key.registered||now-key.received>Math.max(8000,Math.min(45000,(this.last.requestMs||1000)*2.5)))continue;
         const poseCost=Math.abs(pose.yaw-key.yaw)+Math.abs(pose.pitch-(key.pitch||0))*.5;
         const expressionCost=key.expression?expression.reduce((s,v,i)=>s+Math.abs(v-key.expression[i]),0)*.25:0;
         const cost=poseCost+expressionCost+(now-key.received)/80000;
         if(cost<score){best=key;score=cost;}
       }
       if(!best)return photo;
-      if(photo){const mismatch=Math.abs(pose.yaw-best.yaw),expressionGap=best.expression?expression.reduce((s,v,i)=>s+Math.abs(v-best.expression[i]),0):0;if(mismatch>.25||expressionGap>.14)return photo;}
+      if(photo&&Math.abs(pose.yaw-best.yaw)>.32)return photo;
       return best;
     }
     submit(frame,points,reference,settings,normalized,options={}){
       if(!this.enabled||this.busy||performance.now()<this.next||!reference||this.invalidReference===reference)return false;
+      if(root.FacePose&&this.neutralSamples<3){
+        const pose=root.FacePose.basis(points,frame.width),gesture=root.PortraitQuality.expression(points),stamp=options.capturedAt??performance.now();
+        if(Math.abs(pose.yaw)>.35||gesture[2]>.18||Math.min(gesture[0],gesture[1])<.07){this.neutralSamples=0;this.status('Calibración IA · Mira de frente, abre los ojos y relaja la boca.');return false;}
+        if(stamp!==this.neutralStamp){this.neutralStamp=stamp;this.neutralSamples++;}
+        if(this.neutralSamples<3){this.status('Calibrando el gesto neutral de la IA…');return false;}
+      }
       const sourcePoints=points.map(p=>({...p})),inputPoints=options.mirror?points.map(p=>({...p,x:frame.width-p.x})):points;
       const crop=root.neuralFaceCrop(inputPoints,frame.width,frame.height,this.faceSize);if(!crop)return false;
       this.busy=true;const epoch=this.epoch,controller=this.abort=new AbortController(),timeout=setTimeout(()=>controller.abort(),settings.quality==='detail'?95000:45000);
@@ -65,7 +72,7 @@
           if(epoch!==this.epoch)return;this.reference=reference;this.token=data.reference_id;
         }
         const compact=this.engineInfo?.patch_output===true;
-        const result=await this.request('frame',{client_protocol:5,reference_id:this.token,image:canvas.toDataURL('image/jpeg',.92),points:snapshot,settings:{...settings,strength:1,driver_id:epoch,transport:compact?'patch':'legacy'}},controller.signal);
+        const result=await this.request('frame',{client_protocol:5,reference_id:this.token,image:canvas.toDataURL('image/jpeg',.92),points:snapshot,settings:{...settings,strength:1,driver_id:this.driverId,transport:compact?'patch':'legacy'}},controller.signal);
         const image=new Image();image.src=result.image;await image.decode();if(epoch!==this.epoch||!this.enabled)return;
         let layer=null;if(result.layer){layer=new Image();layer.src=result.layer;await layer.decode();}
         const patch=result.transport==='patch',textureW=patch?result.texture_size:crop.outputW,textureH=patch?result.texture_size:crop.outputH;
@@ -80,6 +87,9 @@
             // No mostrar la textura con el UV anterior ni interpolar desde él:
             // sus ojos podrían estar en la frente. La primera vista ya es válida.
             key.uv=fitted;key.registered=true;key.alignmentMs=Math.round(performance.now()-alignmentStarted);
+            key.referenceLayers=views;key.generatedPoints=detected.slice(0,468).map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}));
+            key.toneTarget=reference.toneTarget;key.toneSource=root.ReferenceTone?.sample(image,key.generatedPoints)||null;
+            if(key.toneTarget&&key.toneSource){key.image=root.ReferenceTone.balance(image,key.generatedPoints,key.toneTarget,key.toneSource);key.layer=null;}
             const previous=this.validCache.get(bin);
             if(!previous||previous.received<key.received){this.validCache.delete(bin);this.validCache.set(bin,key);while(this.validCache.size>9)this.validCache.delete(this.validCache.keys().next().value);}
           }).catch(()=>{});
@@ -90,12 +100,14 @@
         const received=performance.now();this.arrivals.push(received);this.arrivals=this.arrivals.slice(-12);
         const fps=this.fps=this.arrivals.length>1?(this.arrivals.length-1)*1000/(received-this.arrivals[0]):0;
         key.published=true;this.cache.delete(bin);this.cache.set(bin,key);while(this.cache.size>9)this.cache.delete(this.cache.keys().next().value);
-        this.last=key;this.next=received+Math.max(0,1000/this.maxFps-(received-started));
+        this.last=key;this.retryCount=0;this.next=received+Math.max(0,1000/this.maxFps-(received-started));
         const provider={DmlExecutionProvider:'DirectML',CUDAExecutionProvider:'CUDA',CPUExecutionProvider:'CPU'}[result.provider]||'ONNX',model=result.model==='live_portrait_512'?'Avatar LivePortrait':result.model?.startsWith('hyperswap')?'HyperSwap 1C':'InSwapper';
         this.status('IA: '+(fps?fps.toFixed(1)+' FPS':'primera imagen')+' · '+model+' · '+provider+' · '+result.ms+' ms · '+views.length+' vista'+(views.length===1?'':'s')+(result.passes===4?' · 4 pasadas':''));delivered=true;
       })().catch(error=>{
         if(epoch!==this.epoch)return;this.fps=0;if(error.status===410){this.token=null;this.reference=null;}if(error.status===400&&error.action==='reference')this.invalidReference=reference;
-        this.next=performance.now()+(error.status===429?400:1800);this.status(error.name==='AbortError'?'El motor tardó demasiado. Reduce el detalle neuronal.':error.message);
+        this.retryCount=error.status===429?(this.retryCount||0)+1:0;
+        const wait=error.status===429?Math.min(8000,Math.max(error.retryMs||0,500*2**Math.min(this.retryCount-1,4))):1800;
+        this.next=performance.now()+wait;this.status(error.status===429?'GPU ocupada · Vista local activa · Reintentando en '+(wait/1000).toFixed(1)+' s':error.name==='AbortError'?'El motor tardó demasiado. Reduce el detalle neuronal.':error.message);
       }).finally(()=>{clearTimeout(timeout);this.busy=false;if(delivered&&epoch===this.epoch&&this.enabled)this.onResult();});
       return true;
     }

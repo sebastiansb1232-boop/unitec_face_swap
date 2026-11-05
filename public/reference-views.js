@@ -3,7 +3,8 @@
   'use strict';
   const Pose=root.FacePose||(typeof require==='function'?require('./face-pose'):null);
   class ReferenceViews{
-    constructor(){this.version=0;this.entries=new Map();}
+    constructor(){this.version=0;this.entries=new Map();this.colorLocked=true;this.tones=new WeakMap();this.prepared=new WeakMap();}
+    setColorLocked(value){this.colorLocked=!!value;this.version++;return this.attach();}
     setFront(reference){this.entries.clear();this.entries.set('front',reference);this.version++;return this.attach();}
     add(side,reference){
       if(!['left','right'].includes(side))throw new Error('Vista desconocida.');
@@ -16,9 +17,11 @@
     remove(side){if(side==='front')return;this.entries.delete(side);this.version++;return this.attach();}
     attach(){
       const front=this.entries.get('front');if(!front)return null;
-      const views=[...this.entries].map(([side,r])=>({side,image:r.image,points:r.points,width:r.image.width}));
+      const tone=r=>{if(!this.tones.has(r))this.tones.set(r,root.ReferenceTone?.sample(r.image,r.points)||null);return this.tones.get(r);};
+      const target=this.colorLocked?tone(front):null,prepared=r=>{const previous=this.prepared.get(r);if(previous?.target===target)return previous.image;const image=root.ReferenceTone?.balance(r.image,r.points,target,tone(r))||r.image;this.prepared.set(r,{target,image});return image;};
+      const views=[...this.entries].map(([side,r])=>({side,image:prepared(r),points:r.points,width:r.image.width,tone:target||tone(r)}));
       // Un objeto nuevo invalida el token anterior una sola vez, nunca al girar.
-      this.reference={...front,uid:'views-'+this.version,views};return this.reference;
+      this.reference={...front,uid:'views-'+this.version,views,toneTarget:target};return this.reference;
     }
     get count(){return this.entries.size;}
   }

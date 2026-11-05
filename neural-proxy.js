@@ -46,8 +46,9 @@ function neuralRouter(options={}){
       if(!upstream.ok){
         healthCache=null;
         const status=[400,410,422,426,429].includes(upstream.status)?upstream.status:503;
-        const messages={400:'La imagen o la malla no son válidas.',410:'La referencia caducó. Vuelve a activar el retrato.',422:'Los ajustes enviados no son válidos.',426:'Actualiza Render, recarga la página y reinicia el motor de la PC con la entrega 1.9.',429:'El motor está ocupado; espera el siguiente fotograma.',503:'El motor no está disponible o rechazó la conexión.'};
+        const messages={400:'La imagen o la malla no son válidas.',410:'La referencia caducó. Vuelve a activar el retrato.',422:'Los ajustes enviados no son válidos.',426:'Actualiza Render, recarga la página y reinicia el motor de la PC con la entrega 1.10.',429:'El motor está ocupado; espera el siguiente fotograma.',503:'El motor no está disponible o rechazó la conexión.'};
         if(action==='reference'&&data.detail==='Las referencias no son compatibles. Usa fotos nítidas de la misma persona y perfiles de tres cuartos.')messages[400]=data.detail;
+        if(status===429){const retry=Math.min(8000,Math.max(500,(Number(upstream.headers.get('retry-after'))||1)*1000));res.set('Retry-After',String(Math.ceil(retry/1000)));return res.status(status).json({error:messages[status],retry_ms:retry});}
         return res.status(status).json({error:messages[status]});
       }
       res.json(data);

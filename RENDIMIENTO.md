@@ -1,12 +1,14 @@
-# Rendimiento actual · Another Face 1.9.0
+# Rendimiento actual · Another Face 1.10.0
 
 Avatar fotográfico procesa la referencia frontal y dos perfiles con seguimiento local y WebGL. Neuronal usa el motor instalado en la PC. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para instalar LivePortrait 512 y conocer los cambios de forma, sombras, ojos y captura.
+
+La entrega 1.10 envía una sola textura JPEG de calidad 95 por resultado, prepara el color una sola vez por imagen y aplica esperas crecientes cuando el motor está ocupado. Los controles geométricos adicionales de perfil también consumen recursos.
 
 La cámara solicita 30 FPS, hasta 60 cuando es posible. Se eliminaron los límites anteriores de 20 detecciones/s y 8 composiciones/s. El seguimiento trabaja con entrada de 384 píxeles (256 en Fluido), sin esperar un fotograma adicional al terminar. La vista se adapta hasta 960 píxeles, 720 en móvil. Las texturas se reutilizan y la generación devuelve un recorte alineado; registrar su malla ya no bloquea otra generación. El modo fotográfico evita copiar la cámara completa para el generador.
 
 Los contadores siguen separados: Vista = composiciones, Seguimiento = detecciones nuevas e IA = resultados nuevos recibidos del motor. Avatar fotográfico no incrementa IA. Reproyectar una textura no crea un fotograma neuronal nuevo.
 
-En varias pruebas de la página completa con cámara simulada, CPU y Chromium con gráficos por software, Avatar fotográfico mostró entre 19–28 FPS de vista y 8–11 de seguimiento, sin errores de WebGL y con cero llamadas al generador. LivePortrait produjo una muestra de 512 en unos 15,8 segundos con CPU; ese entorno no alcanza 30 generaciones/s. No son mediciones de tu GPU ni pruebas comparativas de las mismas cargas.
+En la comprobación actual de la página completa, con tres referencias, cámara simulada y gráficos por software, la vista rondó 27 FPS y el seguimiento entre 12–16 FPS. LivePortrait real produjo una salida de 512 en unos 14 segundos en CPU. Los contadores permanecen separados: 27 composiciones/s no son 27 caras nuevas/s. Se comprobó captura y guardado simulado, sin errores WebGL. No son mediciones de tu GPU ni una comparación controlada contra la versión anterior.
 
 Para medir tu instalación, detén el worker y ejecuta `medir-ia-local.bat`, o `medir-ia-local.bat --avatar` para LivePortrait. El medidor descarta el calentamiento y utiliza tensores sintéticos. Mide solo el generador: excluye extracción de movimiento, seguimiento, compresión, red y dibujo. El presupuesto de 30 generaciones/s es aproximadamente 33,3 ms para todo el trabajo necesario, no solo el modelo.
 

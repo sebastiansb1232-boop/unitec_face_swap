@@ -329,20 +329,23 @@ class FaceEngine:
         if compact:
             # Enviar solo la cara alineada evita dos warps al tamaño de cámara.
             alpha=mask[:,:,None];warped=patch
-            result=np.uint8(np.clip(target*(1-alpha)+patch*alpha,0,255))
+            result=np.uint8(np.clip(patch,0,255))
         else:
             inverse=cv2.invertAffineTransform(matrix); h,w=image.shape[:2]
             alpha=cv2.warpAffine(mask,inverse,(w,h),flags=cv2.INTER_LINEAR)[:,:,None]
             premultiplied=cv2.warpAffine(patch.astype(np.float32)*mask[:,:,None],inverse,(w,h),flags=cv2.INTER_LINEAR)
             warped=np.clip(premultiplied/np.maximum(alpha,1e-6),0,255)
             result=np.uint8(np.clip(image*(1-alpha)+warped*alpha,0,255))
-        ok,jpeg=cv2.imencode('.jpg',result,[cv2.IMWRITE_JPEG_QUALITY,92])
+        ok,jpeg=cv2.imencode('.jpg',result,[cv2.IMWRITE_JPEG_QUALITY,95])
         if not ok: raise RuntimeError('No se pudo codificar el resultado.')
-        layer=np.dstack((np.uint8(warped),np.uint8(np.clip(alpha[:,:,0]*255,0,255))))
-        ok,png=cv2.imencode('.png',layer,[cv2.IMWRITE_PNG_COMPRESSION,3])
-        if not ok:raise RuntimeError('No se pudo codificar la máscara del rostro.')
+        layer_data=None
+        if not compact or settings.get('texture_codec')=='png':
+            layer=np.dstack((np.uint8(warped),np.uint8(np.clip(alpha[:,:,0]*255,0,255))))
+            ok,png=cv2.imencode('.png',layer,[cv2.IMWRITE_PNG_COMPRESSION,3])
+            if not ok:raise RuntimeError('No se pudo codificar la máscara del rostro.')
+            layer_data='data:image/png;base64,'+base64.b64encode(png).decode('ascii')
         core=mask>.95
         gray=cv2.cvtColor(target,cv2.COLOR_BGR2GRAY)
         light_luma=float(np.median(gray[core])/255) if core.any() else .4
         elapsed=(time.perf_counter()-request_started)*1000
-        return {'image':'data:image/jpeg;base64,'+base64.b64encode(jpeg).decode('ascii'),'layer':'data:image/png;base64,'+base64.b64encode(png).decode('ascii'),'transport':'patch' if compact else 'legacy','matte_kind':'mesh' if compact or avatar else 'alpha','active_view':active_view,'affine':matrix.flatten().tolist() if compact else None,'texture_size':size if compact else None,'reference_views':source.get('views',1) if isinstance(source,dict) else 1,'identity_strength':emphasis,'light_luma':round(light_luma,4),'render_protocol':5,'model':getattr(self,'model_name','inswapper_128_fp16'),'native_size':native_size,'output_size':int(generated.shape[0]),'quality':quality,'passes':passes,'ms':round(elapsed),'provider':self.provider,'timing':{'inference_ms':round(inference_ms,1),'other_ms':round(elapsed-inference_ms,1)}}
+        return {'image':'data:image/jpeg;base64,'+base64.b64encode(jpeg).decode('ascii'),'layer':layer_data,'transport':'patch' if compact else 'legacy','matte_kind':'mesh' if compact or avatar else 'alpha','active_view':active_view,'affine':matrix.flatten().tolist() if compact else None,'texture_size':size if compact else None,'reference_views':source.get('views',1) if isinstance(source,dict) else 1,'identity_strength':emphasis,'light_luma':round(light_luma,4),'render_protocol':5,'model':getattr(self,'model_name','inswapper_128_fp16'),'native_size':native_size,'output_size':int(generated.shape[0]),'quality':quality,'passes':passes,'ms':round(elapsed),'provider':self.provider,'timing':{'inference_ms':round(inference_ms,1),'other_ms':round(elapsed-inference_ms,1)}}

@@ -329,7 +329,7 @@
     }
   }
   class ReferenceFace {
-    constructor(status){this.status=status;this.references=[];this.ready=false;this.shape=.95;this.opacity=1;this.tone=1;this.complexion=.7;this.detail=.95;this.softness=.45;this.stability=.55;this.eyes=0;this.mouth=0;this.forehead=0;this.chin=0;this.mode='auto';this.smoother=new Appearance.ExpressionSmoother();this.reset();}
+    constructor(status){this.status=status;this.references=[];this.ready=false;this.shape=.95;this.opacity=1;this.tone=1;this.complexion=.7;this.lockTone=true;this.detail=.95;this.softness=.45;this.stability=.55;this.eyes=0;this.mouth=0;this.forehead=0;this.chin=0;this.mode='auto';this.smoother=new Appearance.ExpressionSmoother();this.reset();}
     reset(){this.neutral=null;this.samples=[];this.lastNormalized=null;this.lastReference=null;this.rendered=false;this.currentReference=null;this.transition=null;this.colors=null;this.lastToneTime=null;this.visibility=0;this.lastDraw=null;this.smoother.reset();}
     lost(){this.rendered=false;this.samples=[];this.lastNormalized=null;this.colors=null;this.lastToneTime=null;this.visibility=0;this.lastDraw=null;this.smoother.reset();this.head?.clearTracking();if(this.ready)this.status('Coloca tu rostro frente a la cámara para activar el retrato.');}
     async prepare(mesh,triangles) {
@@ -376,6 +376,7 @@
       return this.transition?{a:this.transition.from,b:this.transition.to,blend:smooth((now-this.transition.started)/360)}:{a:desired,b:desired,blend:0};
     }
     updateColors(frame,live,now) {
+      if(this.lockTone){this.colors=this.choose(live)?.colors||null;return;}
       if(this.colors&&now-this.lastToneTime<100)return;
       const sampled=this.sampler.sample(frame,live);if(!sampled)return;
       const alpha=this.colors?1-Math.exp(-clamp(now-this.lastToneTime,0,1000)/240):1;
@@ -403,7 +404,7 @@
         let dst=Appearance.transfer(stable,this.neutral,ref.normalized,this.shape,{oval:OVAL,fullHead});
         dst=Quality.anchorGeometry(live,dst,this.renderer.adjacency,fullHead);
         dst=protectTriangles(live,dst,this.renderer.triangles);
-        ctx.drawImage(this.renderer.draw(r.a,r.b,r.blend,live,dst,frame,this.colors,{opacity:this.opacity*this.visibility,tone:this.tone,softness:this.softness,complexion:this.complexion,detail:this.detail,allPoints,fullHead,composite:ctx.canvas,eyes:this.eyes,mouth:this.mouth,forehead:this.forehead,chin:this.chin}),0,0);
+        ctx.drawImage(this.renderer.draw(r.a,r.b,r.blend,live,dst,frame,this.colors,{opacity:this.opacity*this.visibility,tone:this.tone,softness:this.softness,complexion:this.lockTone?1:this.complexion,detail:this.detail,allPoints,fullHead,composite:ctx.canvas,eyes:this.eyes,mouth:this.mouth,forehead:this.forehead,chin:this.chin}),0,0);
         this.rendered=this.visibility>.5 && yaw<.58;
         this.status(yaw>.48?'Gira un poco hacia la cámara para mejorar el ajuste.':'Retrato activo · Ojos anclados y bordes limpios');
       }catch(error){this.ready=false;this.status(error.message);}

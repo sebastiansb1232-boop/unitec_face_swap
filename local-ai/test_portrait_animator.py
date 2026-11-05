@@ -3,6 +3,12 @@ import numpy as np
 from portrait_animator import rotation,transform_motion,expression_transfer,choose_view
 
 class AvatarTests(unittest.TestCase):
+    def test_expression_limit_is_smooth_and_more_conservative_in_profile(self):
+        source=np.zeros((1,21,3),np.float32);neutral=source.copy();driver=np.full_like(source,.6)
+        front=expression_transfer(source,driver,neutral,0,0);profile=expression_transfer(source,driver,neutral,0,75)
+        self.assertLess(float(np.linalg.norm(front,axis=-1).max()),.091)
+        self.assertLess(float(np.linalg.norm(profile,axis=-1).max()),float(np.linalg.norm(front,axis=-1).max()))
+        tiny=expression_transfer(source,np.full_like(source,.001),neutral,0,0);self.assertGreater(float(tiny.min()),.00099)
     def test_rotation_is_rigid_and_motion_uses_source_scale_and_translation(self):
         r=rotation(13,-35,8);np.testing.assert_allclose(r.T@r,np.eye(3),atol=1e-6);self.assertAlmostEqual(float(np.linalg.det(r)),1,places=6)
         m={'pitch':0,'yaw':0,'roll':0,'motion_points':np.ones((1,21,3),np.float32),'scale':np.array([[2]],np.float32),'translation':np.array([[.1,.2,8]],np.float32),'expression':np.zeros((1,21,3),np.float32)}
