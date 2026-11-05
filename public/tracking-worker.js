@@ -20,7 +20,7 @@ async function initialize(data){
     try{const probe=new OffscreenCanvas(1,1).getContext('webgl2'),debug=probe?.getExtension('WEBGL_debug_renderer_info');software=/swiftshader|llvmpipe|software|basic render/i.test(debug?probe.getParameter(debug.UNMASKED_RENDERER_WEBGL):'');probe?.getExtension('WEBGL_lose_context')?.loseContext();}catch{}
     for(const delegate of (role==='image'||data.forceCPU||software?['CPU']:['GPU','CPU'])){
       try{
-        task=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:local('assets/models/face_landmarker.task'),delegate},runningMode:role==='image'?'IMAGE':'VIDEO',numFaces:1,minFaceDetectionConfidence:.55,minFacePresenceConfidence:.55,minTrackingConfidence:.55,outputFaceBlendshapes:false,outputFacialTransformationMatrixes:false});
+        task=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:local('assets/models/face_landmarker.task'),delegate},runningMode:role==='image'?'IMAGE':'VIDEO',numFaces:1,minFaceDetectionConfidence:.55,minFacePresenceConfidence:.55,minTrackingConfidence:.55,outputFaceBlendshapes:role==='live',outputFacialTransformationMatrixes:false});
         backend='tasks-'+delegate.toLowerCase();break;
       }catch{task?.close();task=null;}
     }
@@ -37,7 +37,7 @@ async function handle(data){
     if(task){
       const timestamp=Math.max(lastTimestamp+.001,Number.isFinite(data.timestamp)?data.timestamp:performance.now());lastTimestamp=timestamp;
       const result=role==='image'?task.detect(data.image):task.detectForVideo(data.image,timestamp);
-      return {landmarks:result.faceLandmarks?.[0]||null,faces:result.faceLandmarks?.length||0,backend,ms:performance.now()-started};
+      return {signals:result.faceBlendshapes?.[0]?.categories?Object.fromEntries(result.faceBlendshapes[0].categories.map(c=>[c.categoryName,c.score])):null,landmarks:result.faceLandmarks?.[0]||null,faces:result.faceLandmarks?.length||0,backend,ms:performance.now()-started};
     }
     const nextRefine=data.refine!==false;if(nextRefine!==refine){refine=nextRefine;mesh.setOptions({refineLandmarks:refine});await mesh.reset();}
     if(data.reset)await mesh.reset();landmarks=null;await mesh.send({image:data.image});return {landmarks,backend,ms:performance.now()-started};

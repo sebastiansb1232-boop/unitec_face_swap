@@ -43,7 +43,7 @@
           vec3 generated=layer.rgb/max(layer.a,.001);generated=mix(generated,left.rgb/max(left.a,.001),max(eyeMask(eyeA)*eyeAssist.x,eyeMask(eyeB)*eyeAssist.y));
           vec3 weights=vec3(.299,.587,.114);
           // Corrección uniforme y acotada: conserva poros y gradientes.
-          float skinWeight=1.-.8*max(eyeMask(eyeA),eyeMask(eyeB));
+          float skinWeight=(1.-.8*max(eyeMask(eyeA),eyeMask(eyeB)))*(1.-smoothstep(.015,.12,cover));
           float Y=dot(generated,weights)+complexion.x*skinWeight;
           float U=dot(generated,vec3(-.168736,-.331264,.5))+complexion.y*skinWeight;
           float V=dot(generated,vec3(.5,-.418688,-.081312))+complexion.z*skinWeight;
@@ -95,18 +95,19 @@
       const backgroundReady=this.updateBackground(frame,cameraPoints,points.stamp??now);this.shape.range=backgroundReady ? .32 : .22;this.shape.allowContour=backgroundReady;
       const destination=this.shape.apply(points,key,(settings.shape??.82)*(settings.opacity??1)*visibility,now,this.triangles);
       if(this.canvas.width!==frame.width||this.canvas.height!==frame.height){this.canvas.width=frame.width;this.canvas.height=frame.height;}
-      const eyeReference=key.generatedPoints&&key.referenceLayers?.length?key.referenceLayers.reduce((a,b)=>Math.abs(root.FacePose.basis(a.points,a.width).yaw-yaw)<Math.abs(root.FacePose.basis(b.points,b.width).yaw-yaw)?a:b):null;
+      const eyeReference=key.model==='live_portrait_512'&&key.generatedPoints&&key.referenceLayers?.length?key.referenceLayers.reduce((a,b)=>Math.abs(root.FacePose.basis(a.points,a.width).yaw-yaw)<Math.abs(root.FacePose.basis(b.points,b.width).yaw-yaw)?a:b):null;
       if(key!==this.key||eyeReference!==this.eyeReference){this.duration=eyeReference?0:Q.textureTransition(this.key,key);this.previous=this.duration?this.key:key;this.key=key;this.changed=now;this.eyeReference=eyeReference;this.referenceUV=eyeReference?.points.map(p=>({x:p.x/eyeReference.image.width,y:p.y/eyeReference.image.height}));this.upload(0,eyeReference?.image||this.previous.layer||this.previous.image);this.upload(1,key.layer||key.image);}
       if(root.ReferenceTone&&root.PortraitBlend&&settings.integrate!==false){
         if(!this.toneStats.has(key)){const im=key.image,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;this.toneStats.set(key,root.ReferenceTone.sample(im,key.uv.map(p=>({x:p.x*w,y:p.y*h}))));}
-        if((settings.colorMode||'reference')!=='reference'&&now-this.toneSampleAt>220){
+        if((settings.colorMode||'reference')!=='reference'&&!settings.cameraTone&&now-this.toneSampleAt>220){
           this.toneSampleAt=now;const c=this.toneCanvas||(this.toneCanvas=document.createElement('canvas'));c.width=160;c.height=Math.max(1,Math.round(160*frame.height/frame.width));const x=c.getContext('2d',{willReadFrequently:true});
           if(frame.video&&frame.mirror){x.translate(c.width,0);x.scale(-1,1);}x.drawImage(frame.video||frame,0,0,c.width,c.height);
           this.liveTone=root.ReferenceTone.sample(c,cameraPoints.map(p=>({x:p.x*c.width/frame.width,y:p.y*c.height/frame.height})));
         }
         const source=this.toneStats.get(key);
-        if(this.liveTone&&!this.toneTargetReady){this.toneFilter.value=this.liveTone.mean.slice();this.toneTargetReady=true;}
-        const target=this.liveTone?{mean:this.toneFilter.update(this.liveTone.mean,now)}:null,t=root.PortraitBlend.tone(source,target,settings.colorMode||'reference',settings.colorMix??.85,key.referenceTone);gl.uniform3f(this.uniforms.complexion,...t);
+        const cameraTone=settings.cameraTone||this.liveTone;
+        if(cameraTone&&!this.toneTargetReady){this.toneFilter.value=cameraTone.mean.slice();this.toneTargetReady=true;}
+        const target=cameraTone?{mean:this.toneFilter.update(cameraTone.mean,now)}:null,t=root.PortraitBlend.tone(source,target,settings.colorMode||'reference',settings.colorMix??.85,key.referenceTone);gl.uniform3f(this.uniforms.complexion,...t);
       }else gl.uniform3f(this.uniforms.complexion,0,0,0);
       const elapsed=this.drawTime===null?33:Math.max(1,Math.min(now-this.drawTime,100));this.drawTime=now;
       const liveExpression=Q.expression(points),nativeExpression=key.generatedPoints?Q.expression(key.generatedPoints):liveExpression;

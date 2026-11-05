@@ -24,17 +24,19 @@ self.onmessage=async({data})=>{
       const width=masks[0].width,height=masks[0].height;
       const hair=masks[1].getAsFloat32Array().slice(),skin=masks[2].getAsFloat32Array().slice(),face=masks[3].getAsFloat32Array().slice();
       const canvas=new OffscreenCanvas(width,height),ctx=canvas.getContext('2d',{willReadFrequently:true});
-      ctx.drawImage(bitmap,0,0,width,height);const pixels=ctx.getImageData(0,0,width,height).data,channels=[[],[],[]],faceChannels=[[],[],[]],backgroundChannels=[[],[],[]],background=masks[0].getAsFloat32Array();
+      ctx.drawImage(bitmap,0,0,width,height);const pixels=ctx.getImageData(0,0,width,height).data,channels=[[],[],[]],faceChannels=[[],[],[]],skinChannels=[[],[],[]],backgroundChannels=[[],[],[]],background=masks[0].getAsFloat32Array();
       for(let i=0;i<hair.length;i+=2)for(let c=0;c<3;c++){
         if(hair[i]>.85)channels[c].push(pixels[i*4+c]/255);
         if(face[i]>.85)faceChannels[c].push(pixels[i*4+c]/255);
+        if(skin[i]>.9)skinChannels[c].push(pixels[i*4+c]/255);
         if(background[i]>.95&&i<width*height*.75)backgroundChannels[c].push(pixels[i*4+c]/255);
       }
       const tone=channels[0].length>12?channels.map(median):null;
       const faceTone=faceChannels[0].length>12?faceChannels.map(median):null;
+      const skinTone=skinChannels[0].length>12?skinChannels.map(median):null;
       const backgroundTone=backgroundChannels[0].length>30?backgroundChannels.map(median):null;
       const backgroundSpread=backgroundTone?median(backgroundChannels[0].map((_,i)=>Math.hypot(...backgroundTone.map((v,c)=>backgroundChannels[c][i]-v)))):1;
-      self.postMessage({id,width,height,hair,skin,face,tone,faceTone,backgroundTone,backgroundSpread,elapsed:performance.now()-started},[hair.buffer,skin.buffer,face.buffer]);
+      self.postMessage({id,width,height,hair,skin,face,tone,faceTone,skinTone,backgroundTone,backgroundSpread,elapsed:performance.now()-started},[hair.buffer,skin.buffer,face.buffer]);
     }finally{result.close();}
   }catch(error){self.postMessage({id,error:error.message||'No se pudo segmentar el cabello.'});}
   finally{bitmap?.close();}

@@ -1,6 +1,6 @@
-# IA local en Another Face 1.13.0
+# IA local en Another Face 1.14.0
 
-Esta entrega conserva los labios de referencia, usa el tono frontal como dominante y limita la cámara al interior oral. Añade ajustes opcionales de ojos y labios con dos redes de LivePortrait y corrige la carga de LaMa en DirectML y con memoria limitada. Conserva **Avatar fotográfico en el navegador**, tres referencias y **LivePortrait opcional con salida de 512 píxeles**. HyperSwap e InSwapper siguen disponibles. El protocolo 5 exige actualizar tanto Render como la PC: las texturas se muestran solo tras verificar su registro facial. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para las diferencias, los límites y la actualización de PC y Render.
+Intercambio neuronal modifica la cámara con la identidad de referencia. Prefiere HyperSwap 1C 256 completo y después InSwapper 128. LivePortrait 512 anima una fotografía y queda como una opción explícita, distinta del intercambio. El tono de referencia se aplica a rostro y piel visible del cuerpo mediante segmentación local. La boca generada se conserva completa por defecto; se corrigen el cierre y la correspondencia de puntos que siguen la lengua. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render, y los límites comprobados.
 
 ## Primera instalación en Windows
 
@@ -13,7 +13,7 @@ npm.cmd run start:ai
 
 El instalador crea `.venv-ai`, instala las dependencias y descarga unos 452 MB de pesos básicos. Verifica su tamaño y SHA-256 y reutiliza los completos. No necesitas activar el entorno manualmente. Deja la terminal abierta y visita `http://localhost:3000`. Si falta Python, consulta [INICIO-RAPIDO.md](INICIO-RAPIDO.md).
 
-Avatar fotográfico y los filtros del navegador funcionan sin Python con `npm.cmd start`. Para generar con IA local, selecciona **Neuronal · Generador de la PC**. El arranque calienta el modelo antes de anunciar que está listo.
+Avatar fotográfico y los filtros del navegador funcionan sin Python con `npm.cmd start`. Para generar con IA local, selecciona **Intercambio neuronal · Cámara**. El arranque calienta el modelo antes de anunciar que está listo.
 
 ## Actualizar en la misma PC
 
@@ -23,6 +23,7 @@ HyperSwap opcional:
 
 ```powershell
 .\mejorar-ia-local.bat
+$env:ANOTHERFACE_SWAPPER="auto"
 npm.cmd run start:ai
 ```
 
@@ -42,7 +43,7 @@ Con el motor detenido, ejecuta `.\instalar-relleno-ia.bat`. Descarga 208 MB con 
 
 ## Página en Render, motor en tu PC
 
-Sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Después de preparar `.env.ai`, la terminal del motor utiliza `npm.cmd run start:worker` o, para exigir LivePortrait, `.\iniciar-avatar-ia.bat`. La segunda terminal mantiene el túnel.
+Sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Después de preparar `.env.ai`, la terminal del motor utiliza `.\iniciar-intercambio-ia.bat`. Para animación fotográfica LivePortrait, utiliza `.\iniciar-avatar-ia.bat` y selecciona esa opción explícita en la página. La segunda terminal mantiene el túnel.
 
 Actualiza también Render para el protocolo 5. Mantén el mismo token; cambia la URL solo cuando reinicies el túnel. En Render se ejecuta `npm start`, sin instalar Python ni los pesos. No inicies `start:ai` y `start:worker` simultáneamente.
 
@@ -81,7 +82,7 @@ El proveedor admite auto, cuda, dml y cpu; los hilos, de 1 a 8. No se detecta au
 2. Avatar rápido selecciona la fotografía adecuada y la reproyecta mediante geometría facial de profundidad estimada. No llama al generador ni transmite video a la PC.
 3. En Neuronal, el cliente envía un recorte sin espejo y los puntos de ese mismo fotograma. ArcFace combina las referencias una vez. LivePortrait precalcula además las características de apariencia por vista.
 4. El motor devuelve una textura alineada y la transformación. El navegador registra su malla en paralelo, ajusta las proporciones y la proyecta sobre el seguimiento actual. El rostro no espera a una respuesta nueva para moverse.
-5. Se limita la corrección de luz y se evita volver a introducir la textura de la piel original. Avatar y Neuronal conservan cabello y cuerpo de cámara.
+5. Se limita la corrección de luz y se evita volver a introducir la textura de la piel original. El cabello conserva su apariencia de cámara en intercambio; la piel visible de cuello, orejas, brazos y manos se ajusta al tono elegido cuando la segmentación la reconoce. Ropa y fondo se conservan.
 6. Hay una petición neuronal en vuelo. Las muestras intermedias se descartan; las de otra referencia no reaparecen después de cambiarla o apagar.
 
 LivePortrait produce una imagen de 512 con una pasada. HyperSwap produce 256 e InSwapper 128; su opción Más detalle utiliza cuatro fases. Aumentar el tamaño mostrado no inventa detalle entrenado.
@@ -119,6 +120,6 @@ npm.cmd test
 .\.venv-ai\Scripts\python.exe -m unittest discover -s local-ai -p "test_*.py" -v
 ```
 
-La entrega pasa 99 pruebas JavaScript y 50 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
+La entrega pasa 107 pruebas JavaScript y 50 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
 
 Los pesos se descargan explícitamente con revisión, tamaño y SHA-256 en `local-ai/models.json`; no se incluyen en el ZIP. ArcFace/InSwapper son de investigación no comercial; HyperSwap indica ResearchRAIL-MS. LaMa indica Apache 2.0. El código original LivePortrait es MIT, con condiciones separadas para componentes de terceros. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

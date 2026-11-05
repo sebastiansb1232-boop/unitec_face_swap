@@ -138,13 +138,20 @@ test('neural: bloquea versiones incompatibles de Render y del motor antes de env
   const {n}=client(async()=>response(info));assert.equal(await n.available(),allowed);if(message)assert.match(n.engineInfo.error,message);
  }
 });
-test('neural: una textura sin registro nunca reemplaza una foto ni una textura ya alineada',()=>{
+test('neural: el intercambio no acepta un motor que solo anima fotografías',async()=>{
+ const info={ready:true,proxy_protocol:5,render_protocol:5,patch_output:true,model:'live_portrait_512',engine_kind:'portrait_animation'},c=client(async()=>response(info));
+ assert.equal(await c.n.available(),false);assert.match(c.n.engineInfo.error,/iniciar-intercambio-ia/);
+ c.n.allowPortrait=true;assert.equal(await c.n.available(),true);
+ const swap=client(async()=>response({...info,model:'hyperswap_1c_256',engine_kind:'face_swap'}));
+ assert.equal(await swap.n.available(),true);swap.n.allowPortrait=true;assert.equal(await swap.n.available(),false);
+});
+test('neural: espera el intercambio registrado sin sustituirlo por una foto',()=>{
  const {n,scope}=client(async()=>response({}));scope.FacePose=require('../public/face-pose');
  const reference={...ref,uid:'alignment-check',views:[{...ref,side:'front',width:640}]};
  const photo=n.photoKey(points,640,480,reference,10),valid={...photo,registered:true,referencePhoto:false,received:10,yaw:0,pitch:0,expression:scope.PortraitQuality.expression(points)},broken={...valid,registered:false};
- n.last=broken;n.cache.set(0,broken);assert.equal(n.select(points,640,20,reference,480),photo);
+ n.last=broken;n.cache.set(0,broken);assert.equal(n.select(points,640,20,reference,480),null);assert.equal(n.photoCache.size,1);
  n.validCache.set(0,valid);assert.equal(n.select(points,640,30,reference,480),valid);
- n.reset();assert.equal(n.validCache.size,0);
+ n.reset();assert.equal(n.validCache.size,0);assert.equal(n.select(points,640,40,reference,480),null);n.allowPortrait=true;assert.equal(n.select(points,640,50,reference,480).referencePhoto,true);
 });
 
 test('las fotos amplias se recortan antes de reducir para conservar detalle facial',()=>{

@@ -68,7 +68,7 @@
       });
       const out=project(stable,b);
       // El iris debe compartir el marco estabilizado; no se pega al marco crudo.
-      for(const p of points.slice(468)){const d=sub(pixel(p,width),raw.origin);out.push(...project([{x:dot(d,raw.x)/raw.scale,y:dot(d,raw.y)/raw.scale,z:dot(d,raw.z)/raw.scale}],b));}return out;
+      for(const p of points.slice(468)){const d=sub(pixel(p,width),raw.origin);out.push(...project([{x:dot(d,raw.x)/raw.scale,y:dot(d,raw.y)/raw.scale,z:dot(d,raw.z)/raw.scale}],b));}if(points.signals)out.signals=points.signals;return out;
     }
   }
   const api={basis,normalize,project,fuseViews,validateView,Stabilizer,cross,dot,sub,length};

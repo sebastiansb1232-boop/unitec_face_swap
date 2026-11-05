@@ -1,6 +1,6 @@
 # Another Face · Inicio en Windows
 
-**Entrega 1.13.0:** para actualizar, consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md). Avatar fotográfico anima una referencia frontal y dos perfiles en el navegador con `npm.cmd start`, sin Python ni túnel. Para generación opcional, `instalar-avatar-local.bat` añade LivePortrait 512 y los ajustes de gestos (339 MB en total; 0,74 MB nuevos si ya tienes los cuatro modelos anteriores); `mejorar-ia-local.bat` añade HyperSwap 1C 256 (403 MB). El relleno opcional LaMa se instala con `instalar-relleno-ia.bat` (208 MB). Conserva el entorno, los modelos anteriores y las claves.
+**Entrega 1.14.0:** el motor inicial es **Intercambio neuronal · Cámara**. HyperSwap 1C 256 modifica el recorte de cámara con la identidad de referencia; `mejorar-ia-local.bat` lo añade (403 MB), reutilizando el entorno y los pesos completos. Sin ese peso, se usa InSwapper. La piel visible de rostro y cuerpo se acerca al mismo tono de referencia. Las opciones de fotografía animada son efectos distintos y no sustituyen silenciosamente al intercambio. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
 
 **Para servir la página desde Render y utilizar la IA de tu PC**, sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Los pasos de esta página ejecutan web e IA juntas en la misma computadora.
 
@@ -41,7 +41,7 @@ Inicia la web y la IA juntas:
 npm.cmd run start:ai
 ```
 
-También puedes ejecutar `.\iniciar-ia-local.bat`. Deja la terminal abierta y visita **http://localhost:3000**. Enciende la cámara, carga una referencia y elige **Neuronal · Motor IA**. La primera preparación puede tardar. El perfil **Fluido** reduce la carga de seguimiento y composición. Con Ctrl + C se detienen los procesos.
+También puedes ejecutar `.\iniciar-ia-local.bat`. Deja la terminal abierta y visita **http://localhost:3000**. Enciende la cámara, carga una referencia y elige **Intercambio neuronal · Cámara**. La primera preparación puede tardar. El perfil **Fluido** reduce la carga de seguimiento y composición. Con Ctrl + C se detienen los procesos.
 
 Las siguientes veces solo necesitas `npm.cmd run start:ai`. Para utilizar únicamente los efectos del navegador: `npm.cmd start`.
 

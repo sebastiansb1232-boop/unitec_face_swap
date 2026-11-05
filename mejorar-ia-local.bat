@@ -13,6 +13,6 @@ if errorlevel 1 (
   echo No se completo la mejora. Revisa el mensaje anterior.
   exit /b 1
 )
-echo Listo. Reinicia el motor con npm.cmd run start:worker.
+echo Listo. Reinicia el motor con iniciar-intercambio-ia.bat.
 echo Debe aparecer hyperswap_1c_256. No cambia la clave de .env.ai.
 endlocal

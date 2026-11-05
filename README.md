@@ -1,4 +1,5 @@
-> **Another Face 1.13.0 · Labios de referencia, tono dominante y fondo con memoria controlada.** La cámara asiste solo dientes y lengua. LivePortrait incorpora ajustes opcionales de ojos y labios; LaMa utiliza CPU en un proceso separado mientras el motor facial está descargado. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render.
+> **Another Face 1.14.0 · Intercambio neuronal sobre cámara, piel de referencia también en el cuerpo y cierre de labios corregido.** HyperSwap es el intercambio preferido; LivePortrait queda como animación fotográfica opcional. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render.
+
 
 # Another Face
 
@@ -6,7 +7,7 @@ Estudio de fotos con filtros faciales. Mantiene Express, los cuatro efectos orig
 
 ## Página en Render e IA en tu PC
 
-La guía [MIGRAR-RENDER.md](MIGRAR-RENDER.md) explica cómo crear la clave con `npm run setup:remote`, iniciar el motor protegido con `npm run start:worker` y abrir el túnel con `iniciar-tunel-ia.bat`. Configura `ANOTHERFACE_AI_URL` y `ANOTHERFACE_AI_TOKEN` exclusivamente en el servidor de Render. El motor escucha en loopback y el túnel se comprueba antes de abrirse. Los modelos y `.venv-ai` permanecen en tu PC. Render usa `npm start`.
+La guía [MIGRAR-RENDER.md](MIGRAR-RENDER.md) explica cómo crear la clave con `npm run setup:remote`, iniciar el intercambio protegido con `iniciar-intercambio-ia.bat` y abrir el túnel con `iniciar-tunel-ia.bat`. Configura `ANOTHERFACE_AI_URL` y `ANOTHERFACE_AI_TOKEN` exclusivamente en el servidor de Render. El motor escucha en loopback y el túnel se comprueba antes de abrirse. Los modelos y `.venv-ai` permanecen en tu PC. Render usa `npm start`.
 
 El túnel de prueba cambia de dirección al reiniciarse y requiere mantener la PC encendida. La generación depende del proveedor real y de la conexión; esta separación no garantiza un aumento de FPS.
 
@@ -59,7 +60,7 @@ Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y vario
 
 Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`. Para el motor neuronal: `npm run start:ai`, después de la instalación descrita en IA-LOCAL.md.
 
-Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega pasa 99 pruebas JavaScript y 50 Python, incluidas las de tres vistas, giro, profundidad, boca, lengua, LaMa, clave privada y resultados atrasados. Las pruebas de navegador ejecutaron Avatar fotográfico, LivePortrait con sus redes de ajuste y LaMa aislado en CPU, con captura y guardado simulado. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
+Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Las pruebas de esta entrega incluyen tres vistas, giro, profundidad, boca cerrada, límites de lengua, tono común de rostro/cuerpo, LaMa, clave privada y resultados atrasados. Las pruebas de navegador ejecutan intercambio HyperSwap con tres referencias, segmentación local real y captura con guardado simulado; las pruebas WebGL comprueban espejo, piel, ropa y fondo en casos controlados. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
 
 Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
 - Permitir y denegar cámara; encender, apagar y cambiar cámara.

@@ -171,19 +171,12 @@
         const center=p=>({x:(p[a].x+p[c].x)/2,y:(p[a].y+p[c].y)/2,z:(p[a].z+p[c].z)/2});
         const refCenter=center(reference),refHeight=Math.max(Math.abs(reference[t].y-reference[d].y),.004),baseHeight=Math.max(Math.abs(base[t].y-base[d].y),.015);
         const open=key.generatedPoints?clamp((refHeight+clamp(Math.abs(local[t].y-local[d].y)-baseHeight,-.12,.08))/refHeight,.025,Math.abs(b.yaw)>.6?1.4:1.8):clamp(Math.abs(local[t].y-local[d].y)/baseHeight,.025,1.35);
-        const photoCenter=center(source.shape),neutralHeight=Math.max(Math.abs(this.base3D[t].y-this.base3D[d].y),.015),expectedRatio=clamp(Math.abs(local[t].y-local[d].y)/neutralHeight,.025,1.35),photoHeight=Math.abs(source.shape[t].y-source.shape[d].y)*expectedRatio,assist=key.generatedPoints?smooth(.025,.07,photoHeight-refHeight):0;
+        const photoCenter=center(source.shape),neutralHeight=Math.max(Math.abs(this.base3D[t].y-this.base3D[d].y),.015),expectedRatio=clamp(Math.abs(local[t].y-local[d].y)/neutralHeight,.025,1.35),photoHeight=Math.abs(source.shape[t].y-source.shape[d].y)*expectedRatio,assist=key.model==='live_portrait_512'?smooth(.025,.07,photoHeight-refHeight):0;
         for(const id of ids){const native=refCenter.y+(reference[id].y-refCenter.y)*open,photographic=refCenter.y+(source.shape[id].y-photoCenter.y)*expectedRatio;desired[id].y=native+(photographic-native)*assist;}
       }
-      const span=p=>Math.max(Pose.length(Pose.sub(p[61],p[291])),.03),opening=p=>Math.abs(p[13].y-p[14].y)/span(p);
-      const maxOpen=Math.abs(b.yaw)>.65?.20:.34,rawDelta=opening(local)-opening(base);
-      const mouthCenter={x:(reference[61].x+reference[291].x)/2,y:(reference[13].y+reference[14].y)/2},mouthDelta=key.referencePhoto?clamp(opening(local)-opening(reference),-opening(reference),1.05):Math.max(-opening(reference),maxOpen*Math.tanh(rawDelta/maxOpen)),smile=clamp(span(local)/span(base),.9,1.1),inner=new Set(HOLES[2]);
-      for(const id of A.LIPS){
-        desired[id].x=mouthCenter.x+(reference[id].x-mouthCenter.x)*smile;
-        const direction=Math.sign(reference[id].y-mouthCenter.y);
-        desired[id].y+=direction*mouthDelta*span(reference)*.5*(inner.has(id)?1:.65);
-      }
-      const jaw=Math.max(0,mouthDelta)*.16;
-      for(let i=0;i<desired.length;i++)desired[i].y+=jaw*smooth(mouthCenter.y+.1,reference[152].y,reference[i].y);
+      const mouth=Mouth.retarget(reference,local,base,live.signals);for(const id of A.LIPS)desired[id]=mouth.points[id];
+      const mouthCenter=(reference[13].y+reference[14].y)/2,jaw=Math.max(0,mouth.delta)*.12;
+      for(let i=0;i<desired.length;i++)desired[i].y+=jaw*smooth(mouthCenter+.1,reference[152].y,reference[i].y);
       const browLift=clamp(BROWS.reduce((sum,i)=>sum+local[i].y-base[i].y,0)/Math.max(BROWS.length,1),-.08,.08)*(1-smooth(.3,1.1,Math.abs(b.yaw)));
       for(const id of BROWS)desired[id].y+=browLift;
       const dt=this.time===null?16:clamp(now-this.time,0,100),alpha=1-Math.exp(-dt/85);this.time=now;
@@ -191,13 +184,13 @@
       let error=0;
       const output=local.map((p,i)=>{
         const offset=this.offsets3D[i],value={};
-        for(const axis of ['x','y','z']){const delta=clamp(desired[i][axis]-p[axis],-limits[axis],limits[axis])*strength-offset[axis];error=Math.max(error,Math.abs(delta));offset[axis]+=delta*alpha;value[axis]=p[axis]+offset[axis];}
+        for(const axis of ['x','y','z']){const delta=clamp(desired[i][axis]-p[axis],-limits[axis],limits[axis])*strength-offset[axis];error=Math.max(error,Math.abs(delta));offset[axis]+=delta*(A.LIPS.includes(i)?1-Math.exp(-dt/22):alpha);value[axis]=p[axis]+offset[axis];}
         return value;
       });
       this.morphLocal=constrainMorph3D(local,output,triangles);this.morphStamp=stamp;this.morphAmount=amount;this.morphSettled=error<.0001;this.morphTexture=key;this.contourMode=this.allowContour;
       let projected=Pose.project(this.morphLocal,b);
       if(this.allowContour===false)projected=protectSilhouette(live,projected,b.scale);
-      const safe=constrainGeometry(live.slice(0,468),projected,triangles),out=safe.map((p,i)=>({...p,z:projected[i].z}));this.screenLocal=Pose.normalize(out,width,b);return out;
+      const safe=constrainGeometry(live.slice(0,468),projected,triangles),unsealed=safe.map((p,i)=>({...p,z:projected[i].z})),out=mouth.closed?Mouth.seal(unsealed):unsealed;this.screenLocal=Pose.normalize(out,width,b);return out;
     }
   }
   function constrainMorph3D(live,desired,triangles){

@@ -1,6 +1,6 @@
 # Another Face: página en Render e IA en tu PC
 
-**Actualización 1.13.0:** consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para labios de referencia, tono dominante, tres fotografías y corrección del fallo DirectML/memoria del relleno con LaMa. Actualiza el código de Render y de tu PC, conservando claves y modelos. El estado actual utiliza `render_protocol: 5`, `reference_views: 3` y `patch_output: true`. El modo Avatar fotográfico del navegador funciona sin worker ni túnel; esta guía corresponde a la opción Neuronal.
+**Actualización 1.14.0:** consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para intercambio sobre cámara, piel de referencia también en cuerpo y cierre de labios. Actualiza Render y tu PC conservando claves y modelos. El estado debe indicar `engine_kind: "face_swap"`, versión 1.14.0 y protocolo 5. LivePortrait es una opción de animación fotográfica distinta.
 
 La conexión introducida en 1.5.0 permite separar la página del motor neuronal. Render sirve la web y transmite las solicitudes al motor de tu PC mediante un túnel HTTPS. La PC ejecuta ArcFace y el modelo de intercambio instalado con el proveedor disponible; el navegador conserva el seguimiento y la composición en vivo. Puedes abrir la web desde un celular con cámara y HTTPS.
 
@@ -45,10 +45,10 @@ Se genera una clave aleatoria en `.env.ai`. Si repites el comando, conserva la c
 ## 3. Terminal 1: inicia solo la IA
 
 ```powershell
-npm.cmd run start:worker
+.\iniciar-intercambio-ia.bat
 ```
 
-También puedes abrir `iniciar-worker-ia.bat`. Para el generador opcional LivePortrait, instala primero `instalar-avatar-local.bat` y utiliza `iniciar-avatar-ia.bat` en lugar de `start:worker`. No ejecutes dos motores a la vez. Espera este mensaje:
+Este iniciador selecciona HyperSwap completo y, de lo contrario, InSwapper. Para añadir HyperSwap al entorno existente, ejecuta antes `.\mejorar-ia-local.bat`. También puedes abrir `iniciar-worker-ia.bat`, que respeta la selección de la terminal. Para el generador opcional LivePortrait, instala primero `instalar-avatar-local.bat` inicia `iniciar-avatar-ia.bat` y selecciona «Fotografía animada · LivePortrait» en la página. No ejecutes dos motores a la vez. Espera este mensaje:
 
 ```text
 Motor protegido disponible en 127.0.0.1:8766 · proveedor

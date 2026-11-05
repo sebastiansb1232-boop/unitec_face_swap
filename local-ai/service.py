@@ -65,7 +65,7 @@ class FrameInput(ImageInput):
 
 @app.get('/healthz')
 async def health():
-    return {'ready':engine is not None and not background_working,'background_busy':background_working,'background_safe':True,'gesture_retargeting':bool(getattr(getattr(engine,'avatar',None),'retargeters',None)),'background_available':background_installed(os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))),'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':12,'app_version':'1.13.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
+    return {'engine_kind':'portrait_animation' if getattr(engine,'model_name','')=='live_portrait_512' else 'face_swap','ready':engine is not None and not background_working,'background_busy':background_working,'background_safe':True,'gesture_retargeting':bool(getattr(getattr(engine,'avatar',None),'retargeters',None)),'background_available':background_installed(os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))),'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':13,'app_version':'1.14.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
 
 async def execute(fn,*args):
     if engine is None: raise HTTPException(503,'El motor todavía se está cargando.')
@@ -107,7 +107,7 @@ def prepare_background(folder,image,points,threads):
         try:
             result=generate_background(folder,image,points,min(2,threads))
         finally:
-            # El hijo de LaMa ya terminó antes de volver a cargar LivePortrait.
+            # El hijo de LaMa ya terminó antes de volver a cargar el motor facial.
             print('Fondo IA · relleno terminado; reanudando el motor facial…',flush=True)
             engine=None
             engine=FaceEngine(folder)

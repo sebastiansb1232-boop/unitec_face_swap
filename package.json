@@ -1,6 +1,6 @@
 {
   "name": "another-face",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "Another Face \u2014 estudio de retrato con IA local o remota",
   "main": "server.js",
   "scripts": {

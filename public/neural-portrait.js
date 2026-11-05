@@ -2,10 +2,19 @@
 (function(root){
   'use strict';
   class NeuralPortrait{
-    constructor(status,onResult,fitGenerated){this.status=status;this.onResult=onResult;this.fitGenerated=fitGenerated;this.epoch=0;this.driverId=0;this.neutralSamples=0;this.enabled=false;this.busy=false;this.next=0;this.reference=null;this.token=null;this.last=null;this.arrivals=[];this.faceSize=384;this.maxFps=60;this.cache=new Map();this.validCache=new Map();this.photoCache=new Map();}
+    constructor(status,onResult,fitGenerated){this.status=status;this.onResult=onResult;this.fitGenerated=fitGenerated;this.epoch=0;this.driverId=0;this.neutralSamples=0;this.enabled=false;this.allowPortrait=false;this.busy=false;this.next=0;this.reference=null;this.token=null;this.last=null;this.arrivals=[];this.faceSize=384;this.maxFps=60;this.cache=new Map();this.validCache=new Map();this.photoCache=new Map();}
     resetDriver(){this.driverId++;this.neutralSamples=0;this.neutralStamp=null;}
     reset(keepReference=false){this.epoch++;if(!keepReference){this.abort?.abort();this.resetDriver();}this.last=null;this.cache.clear();this.validCache.clear();this.photoCache.clear();this.photoIdentity=null;this.arrivals=[];this.fps=0;this.next=0;if(!keepReference){this.reference=null;this.token=null;this.invalidReference=null;}}
-    async available(){try{const r=await fetch('/api/neural/status',{signal:AbortSignal.timeout(8000)});this.engineInfo=await r.json();if((this.engineInfo.proxy_protocol||0)<5){this.engineInfo.error='Actualiza el código de Render y vuelve a cargar la página.';return false;}if(this.engineInfo.ready&&((this.engineInfo.render_protocol||0)<5||!this.engineInfo.patch_output)){this.engineInfo.error='Actualiza y reinicia el motor de la PC con la misma entrega de Render.';return false;}return r.ok&&this.engineInfo.ready===true;}catch{return false;}}
+    async available(expected=this.allowPortrait?'portrait':'swap'){
+      try{
+        const r=await fetch('/api/neural/status',{signal:AbortSignal.timeout(8000)});this.engineInfo=await r.json();const info=this.engineInfo;
+        if((info.proxy_protocol||0)<5||info.ready&&((info.render_protocol||0)<5||!info.patch_output)){info.error='Actualiza Render y el motor de la PC con la misma entrega.';return false;}
+        const portrait=info.model==='live_portrait_512'||info.engine_kind==='portrait_animation';
+        if(info.ready&&expected==='swap'&&portrait){info.error='Ese motor anima una foto. Inicia iniciar-intercambio-ia.bat para intercambiar el rostro sobre tu cámara.';return false;}
+        if(info.ready&&expected==='portrait'&&!portrait){info.error='Para esta opción fotográfica inicia iniciar-avatar-ia.bat. Intercambio neuronal utiliza el motor actual.';return false;}
+        return r.ok&&info.ready===true;
+      }catch{return false;}
+    }
     async request(path,body,signal){
       const r=await fetch('/api/neural/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
       const data=await r.json();if(!r.ok){const error=new Error(data.error||'No se pudo procesar el fotograma.');error.status=r.status;error.action=path;error.retryMs=data.retry_ms;throw error;}return data;
@@ -31,20 +40,20 @@
       return this.photoCache.get(view.side);
     }
     select(points,width,now=performance.now(),reference=null,height=null){
-      const photo=this.photoKey(points,width,height,reference,now);
+      const photo=this.photoOnly||this.allowPortrait?this.photoKey(points,width,height,reference,now):null;
       if(this.photoOnly)return photo;
       if(!this.last)return photo;
       if(!root.FacePose||!points)return this.last.registered?this.last:photo;
       const pose=root.FacePose.basis(points,width),expression=root.PortraitQuality.expression(points);let best=null,score=Infinity;
       for(const key of this.validCache.values()){
-        if(!key.registered||now-key.received>Math.max(8000,Math.min(45000,(this.last.requestMs||1000)*2.5)))continue;
+        if(!key.registered||now-key.received>Math.max(1800,Math.min(10000,(this.last.requestMs||1000)*2.5)))continue;
         const poseCost=Math.abs(pose.yaw-key.yaw)+Math.abs(pose.pitch-(key.pitch||0))*.5;
         const expressionCost=key.expression?expression.reduce((s,v,i)=>s+Math.abs(v-key.expression[i]),0)*.25:0;
         const cost=poseCost+expressionCost+(now-key.received)/80000;
         if(cost<score){best=key;score=cost;}
       }
       if(!best)return photo;
-      if(photo&&Math.abs(pose.yaw-best.yaw)>.32)return photo;
+      if(Math.abs(pose.yaw-best.yaw)>.48)return photo;
       return best;
     }
     submit(frame,points,reference,settings,normalized,options={}){
@@ -82,12 +91,14 @@
         const alignmentStarted=performance.now();
         if(this.fitGenerated&&root.PortraitQuality){
           Promise.resolve(this.fitGenerated(image,{...crop,outputW:textureW,outputH:textureH,uv:inputUV},sourcePoints)).then(detected=>{
-            const fitted=root.PortraitQuality.registeredUV(detected,inputUV,textureW,textureH);
+            const safeDetected=root.MouthMotion?root.MouthMotion.sanitize(detected.map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}))):null;
+            const corrected=safeDetected?safeDetected.map(p=>({x:p.x/textureW,y:p.y/textureH,z:p.z})):detected;
+            const fitted=root.PortraitQuality.registeredUV(corrected,inputUV,textureW,textureH);
             if(!fitted||epoch!==this.epoch||!this.enabled)return;
             // No mostrar la textura con el UV anterior ni interpolar desde él:
             // sus ojos podrían estar en la frente. La primera vista ya es válida.
             key.uv=fitted;key.registered=true;key.alignmentMs=Math.round(performance.now()-alignmentStarted);
-            key.referenceLayers=views;key.generatedPoints=detected.slice(0,468).map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}));if(root.MouthMotion)key.generatedPoints=root.MouthMotion.sanitize(key.generatedPoints);
+            key.referenceLayers=views;key.generatedPoints=corrected.slice(0,468).map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}));if(root.MouthMotion)key.generatedPoints=root.MouthMotion.sanitize(key.generatedPoints);
             key.referenceTone=reference.skinTone||reference.toneTarget;key.toneTarget=reference.toneTarget;key.toneSource=root.ReferenceTone?.sample(image,key.generatedPoints)||null;
             if(key.toneTarget&&key.toneSource){key.image=root.ReferenceTone.balance(image,key.generatedPoints,key.toneTarget,key.toneSource);key.layer=null;}
             const previous=this.validCache.get(bin);

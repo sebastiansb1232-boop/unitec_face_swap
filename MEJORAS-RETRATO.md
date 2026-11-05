@@ -1,69 +1,65 @@
-# Another Face 1.13.0 · Labios de referencia y fondo con memoria controlada
+# Another Face 1.14.0 · Intercambio sobre cámara y piel unificada
 
-## Cambios de esta entrega
+## Qué cambia
 
-- **Labios de la referencia:** se retira la mezcla automática que copiaba la boca completa de cámara. Los labios y su piel circundante pertenecen al retrato. «Dientes y lengua en vivo» solo asiste la cavidad al abrir la boca, con un pequeño margen interior y una transición breve. Al cerrar, desaparece. Se mantiene la geometría robusta ante un punto que salta hacia la lengua.
-- **Color dominante:** «Referencia · Todo el rostro» es el valor inicial. El objetivo es el tono mediano de la fotografía frontal y se aplica también a los resultados generados y a los perfiles, incluida la frente. El ajuste conserva textura y gradientes; no es un relleno plano de un solo RGB. Cámara e Intermedio siguen disponibles; Intermedio comienza con 85 % de referencia. La cavidad oral mantiene sus colores naturales.
-- **Apertura de ojos y labios con IA:** dos redes pequeñas de LivePortrait ajustan las aperturas, conservando la anatomía de referencia y usando cambios relativos desde la calibración. Suman 732443 bytes, unos 0,74 MB. Se ejecutan en CPU con un hilo, sin otra sesión DirectML. Los cuatro modelos anteriores continúan funcionando si estos dos pesos aún no están instalados. También se acota la ampliación geométrica excesiva de los párpados.
-- **Perfil y cuerpo:** desaparece la reproyección que estiraba píxeles vecinos de cuello, ropa y fondo. Sin fondo preparado se mantiene la silueta original y se adaptan las facciones interiores. Con fondo preparado se puede retirar el contorno original y adaptar también la silueta. La máscara utiliza puntos del contorno, nariz y labios exteriores; un punto interior mal detectado no amplía el área hacia el cuerpo.
-- **Fluidez:** la geometría y sus comprobaciones se reutilizan entre detecciones nuevas; posición y giro siguen la predicción rígida. Se reduce el buffer gráfico de 45264 a 22800 bytes y se evita trabajo de color de cámara cuando domina la referencia. También se omiten subidas de textura de cámara cuando no se usan regiones originales y copias grandes mientras el generador está ocupado. La generación neuronal sigue contando solo resultados nuevos.
-- **Dependencias:** se actualizan paquetes compatibles y se fija qs 6.17.1 mediante overrides. La auditoría de esta entrega informa cero vulnerabilidades; el archivo de bloqueo se entrega actualizado.
+- **Intercambio neuronal es el motor inicial.** HyperSwap modifica el recorte de cámara con la identidad de las fotos; InSwapper es la alternativa cuando HyperSwap no está instalado. LivePortrait anima una fotografía y queda como una opción distinta, no como el motor recomendado para moldear tu cara. Si el worker es LivePortrait y eliges intercambio, la página avisa y pide iniciar el motor correcto.
+- **Sin fotografía de sustitución.** En intercambio, una textura sin registro válido o de una pose demasiado diferente se retira mientras llega otra. No se sustituye silenciosamente por la foto frontal ni se añaden ojos fotográficos. La cámara y el seguimiento continúan.
+- **Piel de rostro y cuerpo.** El valor inicial es «Referencia · Rostro y piel visible», con «Unificar toda la piel visible» activado. El modelo local distingue piel facial y corporal de ropa, cabello y fondo. Se ajustan por separado sus medianas al mismo objetivo de la frontal, manteniendo gradientes y sombras. Incluye cuello, orejas, brazos y manos cuando la segmentación los reconoce. Cámara conserva el cuerpo original; Intermedio comparte un objetivo mezclado. Desactivar la casilla permite limitar la corrección al rostro. No convierte toda la imagen en un color plano.
+- **Máscara que acompaña al movimiento.** La segmentación se calcula sobre una copia de hasta 256 píxeles en un Worker. Un control de antigüedad y diferencias de imagen retira zonas atrasadas para evitar pintar ropa o fondo al moverse. La comparación se realiza a la escala de la máscara para no dejar huecos sobre detalles finos. La vigencia tolera el costo de arranque y procesamiento sin devolver enseguida el tono original; la captura espera una muestra vigente. Los lienzos y los buffers se reutilizan.
+- **Boca generada completa por defecto.** «Interior de cámara · Opcional» está desactivado. No se recortan los labios de cámara para pegarlos sobre el retrato. Se corrige el saneamiento que podía separar los puntos interiores con la boca cerrada; el cierre sella todas las parejas interiores. El movimiento conserva el espesor del labio y utiliza señales de mandíbula/cierre para limitar puntos que siguen la lengua. El contorno responde más rápido que el resto de las proporciones.
+- **Registro coherente.** Cuando se corrige un punto de la boca generada, se corrigen tanto sus coordenadas de textura como su geometría. No se aplica una corrección a una sola mitad de la correspondencia. Se conservan la estabilización de pose, la predicción breve y una única solicitud neuronal en vuelo.
 
-## Tu registro DirectML / bad allocation
+No se ha entrenado un modelo nuevo para tu persona ni un segmentador específico de lengua. La segmentación de piel y el intercambio siguen siendo estimaciones: oclusiones, perfiles extremos y gestos rápidos pueden fallar. La salida de HyperSwap es de 256 píxeles nativos; cuatro pasadas aumentan el tamaño a costa de tiempo, no garantizan detalle HD real.
 
-El nodo `/generator/model/model.5/conv1/ffc/convg2g/fu/rttn/MatMul_5` pertenece al archivo LaMa incluido en el manifiesto. Se verificó en el grafo ONNX: no aparece en el generador LivePortrait. La entrega 1.12 intentaba LaMa en DirectML y, al fallar, cargaba otra sesión de CPU mientras conservaba las sesiones faciales.
+## Actualizar tu misma carpeta
 
-Ahora LaMa utiliza únicamente CPU en un proceso hijo. Bajo el bloqueo del motor se liberan primero las sesiones faciales, se prepara el fondo, termina el hijo y después se reconstruye LivePortrait con el proveedor configurado. La página vuelve a preparar las referencias porque los tokens anteriores ya no pertenecen a ese motor. Hay un tiempo máximo para el hijo y una alternativa manual si falla. Cancelar una solicitud HTTP mantiene el bloqueo hasta que termine el trabajo nativo, evitando solapar otra carga.
-
-Este cambio evita ese intento DirectML y la carga simultánea de ambos generadores. No se ha probado en tu GPU física ni elimina todas las causas posibles de falta de memoria. **No hace falta cambiar toda tu instalación a CPU:** el motor facial puede seguir usando DirectML. Durante la preparación de fondo, la generación facial se pausa y la vista fotográfica continúa.
-
-## Actualizar en la misma carpeta
-
-Detén el motor con Ctrl + C y copia el contenido de Another-Face del ZIP sobre tu misma carpeta existente. Conserva `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`. No crees una carpeta Another-Face dentro de otra.
+Detén el motor anterior con Ctrl + C. Reemplaza el código de la carpeta existente con el contenido de Another-Face del ZIP. Conserva `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`. No anides otra carpeta Another-Face.
 
 ```powershell
 cd "C:\Users\sebastian estevan\Desktop\FIEE-unitec\Another-Face"
 npm.cmd ci
-.\instalar-avatar-local.bat
-.\iniciar-avatar-ia.bat
+.\mejorar-ia-local.bat
+.\iniciar-intercambio-ia.bat
 ```
 
-El instalador verifica y reutiliza los pesos completos. Si ya tenías LivePortrait, solo añade los dos modelos de gestos, unos 0,74 MB. No reinstala DirectML ni crea otro entorno. Si nunca lo instalaste, el conjunto LivePortrait completo ronda 339 MB; los modelos básicos siguen siendo necesarios.
+`mejorar-ia-local.bat` añade HyperSwap 1C 256, unos 403 MB. Si ya está completo, lo verifica y reutiliza. Usa el entorno existente y no cambia DirectML. Si no tienes espacio, puedes iniciar el intercambio con los modelos básicos de InSwapper ya instalados. No es necesario volver a descargar LivePortrait.
 
-Mantén el túnel existente abierto si aún apunta al puerto 8766. Si lo cerraste, abre otra terminal en la misma carpeta y ejecuta `.\iniciar-tunel-ia.bat`. Si cambia su dirección, actualiza `ANOTHERFACE_AI_URL` en Render y conserva el token que coincide con `.env.ai`.
+El nuevo iniciador fuerza la selección automática de intercambio: HyperSwap completo, después InSwapper. No hereda una selección `avatar` de otra terminal. No inicies dos workers simultáneamente. La animación fotográfica opcional mantiene su propio iniciador `iniciar-avatar-ia.bat` y su opción explícita en la página.
 
-Publica el código en main desde esa misma carpeta:
+En otra terminal, si el puente no sigue abierto:
+
+```powershell
+cd "C:\Users\sebastian estevan\Desktop\FIEE-unitec\Another-Face"
+.\iniciar-tunel-ia.bat
+```
+
+Si cambia la URL del túnel, actualiza `ANOTHERFACE_AI_URL` en Render y conserva el token que coincide con `.env.ai`. Un túnel todavía activo al puerto 8766 se puede reutilizar.
+
+## Actualizar main y Render
+
+Desde esa misma carpeta, después de comprobar que es la raíz correcta:
 
 ```powershell
 git rev-parse --show-toplevel
 git status
 git add public local-ai scripts tests supabase *.js *.json *.md *.bat render.yaml .gitignore .env.example
 git diff --cached --stat
-git commit -m "Refina facciones y corrige memoria de Another Face 1.13.0"
+git commit -m "Corrige intercambio, boca y piel de Another Face 1.14.0"
 git push origin main
 ```
 
-La raíz y los archivos deben corresponder al proyecto. Los entornos, modelos descargados y claves permanecen excluidos. En tu servicio existente de Render despliega el último commit de main: Build `npm ci`, Start `npm start`. Recarga con Ctrl + F5. La cabecera y `/api/neural/status` deben mostrar **1.13.0** para web y motor, con protocolo 5. `gesture_retargeting: true` indica que se cargaron los ajustes adicionales. `background_safe: true` indica la nueva ruta de CPU aislada. El cliente usa caché v16.
+Despliega el último commit de main en tu Web Service existente: Build `npm ci`, Start `npm start`. No se instala Python ni se suben los modelos a Render. Recarga con Ctrl + F5. La cabecera debe mostrar **1.14.0** y `/api/neural/status` debe indicar esa versión en `engine_version`, con `engine_kind: "face_swap"` y `model: "hyperswap_1c_256"` o `inswapper_128_fp16`. El protocolo sigue siendo 5 y la caché del cliente es v17. Esta entrega no se ha publicado en tu GitHub ni Render automáticamente.
 
-## Ajustes recomendados
+## Uso recomendado
 
-Selecciona Neuronal, perfil Natural, intensidad 100 % y **Referencia · Todo el rostro**. Deja «Unificar tono entre vistas» activado y las mezclas opcionales de ojos, boca, frente y mentón originales en cero. «Dientes y lengua en vivo» está activado por defecto y solo utiliza el interior de la boca; puedes desactivarlo para conservar exclusivamente la salida generada. Mira de frente, con ojos abiertos y boca relajada, para calibrar.
+Elige **Intercambio neuronal · Cámara**, detalle **256 nativo · 1 pasada** si está instalado HyperSwap, perfil Natural, intensidad 100 %, color Referencia y unificación de piel activada. Mantén las mezclas del rostro original en cero y el interior de cámara desactivado. Mira de frente, con ojos abiertos y boca relajada, para calibrar. Carga una frontal y dos perfiles opuestos de la misma persona, preferiblemente entre 25 y 70 grados; el contador debe indicar tres vistas. Las fotos se conservan en memoria de la pestaña y debes volver a cargarlas tras recargar.
 
-En las capturas aportadas el motor indica **1 vista**. Para utilizar ambos perfiles, vuelve a cargarlos después de recargar la página: las fotografías se conservan en memoria de la pestaña, no se guardan de forma permanente. El contador debe indicar tres vistas. Utiliza perfiles opuestos de la misma persona, preferiblemente de tres cuartos y con ojos visibles.
+Sin fondo preparado se conserva la silueta original para no dejar recortes del cuerpo. Para reducir también el contorno de nariz o mandíbula, fija la cámara y prepara el fondo en «Retirar contorno original». La captura manual pide salir del encuadre durante tres segundos; el relleno opcional LaMa requiere `instalar-relleno-ia.bat`. No se estira la ropa o el cuello para cubrir el hueco. El fondo preparado no sirve si mueves la cámara o cambia el escenario.
 
-Para cambiar el contorno exterior, fija la cámara y abre **Retirar contorno original**:
+Se mantiene la corrección del error LaMa/DirectML de 1.13: LaMa se ejecuta en un hijo de CPU después de liberar las sesiones faciales; al terminar se reconstruye el motor y se preparan nuevos tokens. No hace falta cambiar el motor facial completo a CPU. `background_safe: true` identifica esa ruta. La generación facial se pausa durante la preparación del fondo.
 
-- **Capturar fondo · 3 segundos:** sal por completo del encuadre y vuelve tras la confirmación. Conserva el fondo real y no carga otro modelo.
-- **Generar fondo con IA · LaMa:** necesita el peso opcional, instalado una vez con `.\instalar-relleno-ia.bat`. LaMa puede inventar detalles detrás de la cabeza. La cámara debe permanecer fija. No repitas la instalación si el archivo de 208 MB ya se verificó.
+## Verificación y límites de rendimiento
 
-Cambiar de cámara, resolución o apagarla invalida el fondo. Si cambia el escenario o mueves la cámara, prepara otro. El efecto intercambia el rostro; cuello, orejas, cabello y cuerpo conservan su apariencia de cámara. Al reducir la silueta, el fondo solo ocupa el espacio del contorno original, sin estirar las zonas vecinas.
+Pasan **107 pruebas JavaScript y 50 Python**; `npm audit` informa **0 vulnerabilidades** con el bloqueo de dependencias incluido. Las pruebas cubren cierre de labios sin abertura artificial, espesor del labio al hablar, puntos que siguen la lengua, propagación de señales faciales, separación entre intercambio y animación, resultados atrasados, tono común de cara/cuerpo y máscaras que pierden validez con movimiento. Las pruebas de píxeles WebGL comprueban tono común, espejo, captura y conservación de ropa/fondo en casos controlados.
 
-## Verificación y límites
-
-Pasan **99 pruebas JavaScript y 50 Python**. Incluyen tono frontal dominante, mezcla de color, límites de lengua y apertura oral, estabilización, conservación de silueta, cancelación sin liberar prematuramente el motor, selección CPU para LaMa y recuperación del motor tras un fallo simulado de memoria. `npm audit` informa **0 vulnerabilidades** con este archivo de bloqueo.
-
-La página completa se probó en Chromium con tres referencias, cámara simulada, LivePortrait y sus ajustes reales, LaMa en proceso separado, reconstrucción del motor, nuevo token de referencia, una generación posterior y captura guardada en un servidor simulado. No hubo errores JavaScript ni WebGL ni desbordamiento a 390 píxeles. Las pruebas de píxeles distinguen labios de referencia e interior oral de cámara y comprueban que el antiguo contorno de nariz se sustituye por el fondo preparado. Se dibujaron ambos perfiles reales usando la misma foto como fuente y destino, sin desplazamiento espurio.
-
-El generador continúa produciendo 512 píxeles nativos. En la prueba completa de CPU, la vista osciló aproximadamente entre 12 y 30 composiciones/s, el seguimiento entre 7 y 17 detecciones/s y LivePortrait necesitó unos 15–17 segundos de inferencia. Son contadores diferentes. No se ha medido tu DirectML ni se garantizan 30 generaciones neuronales/s. Las capturas filtradas no sustituyen un video original con todos los gestos para comprobar realismo o lengua muy extendida. Movimientos rápidos, oclusiones y perfiles extremos todavía pueden producir artefactos.
-
-Consulta [RENDIMIENTO.md](RENDIMIENTO.md) para la medición de composición y cómo medir el generador en tu PC.
+La página completa se verifica con Chromium, cámara simulada, tres referencias reales, HyperSwap 256 en CPU, segmentación real y captura guardada en un servidor simulado. Esto no equivale a probar conversación, lengua extendida ni perfiles dinámicos de tu cámara física. No se garantizan 30 generaciones/s, ausencia total de artefactos ni resultado fotorrealista en todos los gestos. Consulta [RENDIMIENTO.md](RENDIMIENTO.md) para las mediciones y sus condiciones.

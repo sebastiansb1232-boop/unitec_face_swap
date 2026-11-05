@@ -39,7 +39,7 @@
       if(this.promise)return this.promise;
       this.promise=(async()=>{
         if(!root.Worker||!root.createImageBitmap)throw new Error('Este navegador no permite segmentar el cabello. El rostro sigue disponible.');
-        this.worker=new Worker('segmentation-worker.js?v=16');
+        this.worker=new Worker('segmentation-worker.js?v=17');
         this.worker.onmessage=({data})=>{const item=this.pending.get(data.id);if(!item)return;clearTimeout(item.timer);this.pending.delete(data.id);data.error?item.reject(new Error(data.error)):item.resolve(data);};
         this.worker.onerror=()=>{this.fail(new Error('No se pudo cargar la segmentación. Comprueba que copiaste las carpetas models y vendor.'));};
         await this.request(null);return this;
