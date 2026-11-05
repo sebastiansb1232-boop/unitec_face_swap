@@ -75,3 +75,9 @@ Fuente original de LaMa: https://github.com/advimman/lama. Exportación de Carve
 Descarga explícita de `lama_fp32.onnx`, revisión `c3c0c9e468934d62e79c329e35d82dd09ff8c444`, 208044816 bytes, SHA-256 `1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6`. Las URL y la huella se conservan en `local-ai/models.json`. No se incluyen los pesos en este ZIP. El texto Apache 2.0 está en `public/vendor/LICENSE-APACHE-2.0.txt`.
 
 Solo se solicita al pulsar Generar fondo con IA. Las imágenes se procesan en el motor configurado de Another Face; no se envían a Carve ni a Hugging Face. Capturar un fondo limpio manualmente no requiere este modelo.
+
+## Ajustes de ojos y labios de LivePortrait (opcionales desde 1.13)
+
+Se agregan las exportaciones `live_portrait_eye_retargeter.onnx` (581421 bytes, SHA-256 `13cf8b06f0a314e6e65b4a47fea5ce270edb79cd54359c4d273f2c139820276b`) y `live_portrait_lip_retargeter.onnx` (151022 bytes, SHA-256 `0f5b76344d0bfbb44c8a0b1ec57a4a7c36fd38db530338777a48c4a33a02d71f`). Pertenecen a la misma distribución fijada de FaceFusion models-3.0.0, revisión `728b9659bd9691bf32cbf7f61af478d94b7ba81e`, y no se incluyen en el ZIP. Se conservan en `local-ai/models.json` sus URL y huellas.
+
+El contrato de entrada es un vector de 66 valores para ojos y 65 para labios, con salida 1 × 21 × 3. Se consultaron las funciones de ajuste de la implementación original de LivePortrait: https://github.com/KlingAIResearch/LivePortrait/blob/main/src/live_portrait_wrapper.py y el contrato ONNX en https://github.com/facefusion/facefusion/blob/master/facefusion/processors/modules/face_editor/core.py. La integración calcula residuos relativos y acotados con NumPy y ONNX Runtime; no incorpora la aplicación FaceFusion. Las condiciones del código original y de sus componentes de terceros se mantienen según la sección LivePortrait anterior.

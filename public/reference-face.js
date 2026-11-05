@@ -329,7 +329,7 @@
     }
   }
   class ReferenceFace {
-    constructor(status){this.status=status;this.references=[];this.ready=false;this.shape=.95;this.opacity=1;this.tone=1;this.complexion=.7;this.lockTone=true;this.colorMode='camera';this.colorBlend=.5;this.detail=.95;this.softness=.45;this.stability=.55;this.eyes=0;this.mouth=0;this.forehead=0;this.chin=0;this.mode='auto';this.smoother=new Appearance.ExpressionSmoother();this.reset();}
+    constructor(status){this.status=status;this.references=[];this.ready=false;this.shape=.95;this.opacity=1;this.tone=1;this.complexion=.7;this.lockTone=true;this.colorMode='reference';this.colorBlend=.85;this.detail=.95;this.softness=.45;this.stability=.55;this.eyes=0;this.mouth=0;this.forehead=0;this.chin=0;this.mode='auto';this.smoother=new Appearance.ExpressionSmoother();this.reset();}
     reset(){this.neutral=null;this.samples=[];this.lastNormalized=null;this.lastReference=null;this.rendered=false;this.currentReference=null;this.transition=null;this.colors=null;this.lastToneTime=null;this.visibility=0;this.lastDraw=null;this.smoother.reset();}
     lost(){this.rendered=false;this.samples=[];this.lastNormalized=null;this.colors=null;this.lastToneTime=null;this.visibility=0;this.lastDraw=null;this.smoother.reset();this.head?.clearTracking();if(this.ready)this.status('Coloca tu rostro frente a la cámara para activar el retrato.');}
     async prepare(mesh,triangles) {

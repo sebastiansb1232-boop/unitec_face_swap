@@ -24,7 +24,7 @@
         precision mediump float;
         #endif
         uniform sampler2D photoA;uniform sampler2D photoB;uniform sampler2D camera;uniform sampler2D background;uniform sampler2D oldFace;uniform float backgroundReady;
-        uniform float transition;uniform float intensity;uniform float onlyLive;uniform float cameraMirror;
+        uniform float transition;uniform float oralBlend;uniform float intensity;uniform float onlyLive;uniform float cameraMirror;
         uniform float feather;uniform float matteA;uniform float matteB;
         uniform vec3 complexion;uniform vec4 eyeA;uniform vec4 eyeB;uniform vec2 eyeAssist;
         varying vec2 a;varying vec2 b;varying vec2 c;varying vec2 screenUV;varying float border;varying float own;varying float cover;
@@ -49,23 +49,24 @@
           float V=dot(generated,vec3(.5,-.418688,-.081312))+complexion.z*skinWeight;
           generated=clamp(vec3(Y+1.402*V,Y-.344136*U-.714136*V,Y+1.772*U),0.,1.);
           float alpha=layer.a*intensity;
-          vec3 color=mix(generated,original,own);
+          float cameraAmount=max(own,oralBlend*smoothstep(.015,.11,cover));
+          vec3 color=mix(generated,original,cameraAmount);
           gl_FragColor=vec4(color*alpha,alpha);
         }`));
       gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('No se pudo enlazar la composición neuronal.');gl.useProgram(program);
       gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer=gl.createBuffer());
-      this.data=new Float32Array((471+468+4)*12);gl.bufferData(gl.ARRAY_BUFFER,this.data.byteLength,gl.DYNAMIC_DRAW);
+      this.data=new Float32Array(475*12);gl.bufferData(gl.ARRAY_BUFFER,this.data.byteLength,gl.DYNAMIC_DRAW);
       [['pos',3,0],['sourceA',2,12],['sourceB',2,20],['live',2,28],['edge',1,36],['native',1,40],['erase',1,44]].forEach(([name,size,offset])=>{const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,48,offset);});
-      this.uniforms=Object.fromEntries(['transition','intensity','onlyLive','cameraMirror','feather','matteA','matteB','eyeA','eyeB','eyeAssist','complexion','backgroundReady'].map(n=>[n,gl.getUniformLocation(program,n)]));
+      this.uniforms=Object.fromEntries(['transition','oralBlend','intensity','onlyLive','cameraMirror','feather','matteA','matteB','eyeA','eyeB','eyeAssist','complexion','backgroundReady'].map(n=>[n,gl.getUniformLocation(program,n)]));
       ['photoA','photoB','camera','background','oldFace'].forEach((n,i)=>gl.uniform1i(gl.getUniformLocation(program,n),i));
       this.textureSizes=[];this.textures=Array.from({length:5},(_,i)=>{gl.activeTexture(gl.TEXTURE0+i);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);for(const p of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,p,gl.LINEAR);for(const p of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,p,gl.CLAMP_TO_EDGE);return t;});
-      for(const unit of [3,4]){gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,this.textures[unit]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(4));}
+      for(const unit of [2,3,4]){gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,this.textures[unit]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(4));}
       gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
       const adjacency=Array.from({length:468},()=>new Set());for(const t of triangles)for(const i of t)for(const j of t)if(i!==j)adjacency[i].add(j);
-      this.regions=Q.featureRegions(adjacency,true);this.oralRegion=Q.ringDistances(adjacency,root.FaceAppearance.LIPS).map(d=>1-Q.smooth(0,2.5,d));
+      this.regions=Q.featureRegions(adjacency,true);this.innerMouth=new Set(HOLES[2]);
       const indices=triangles.flat();this.meshCount=indices.length;
       HOLES.forEach((ids,k)=>ids.forEach((id,i)=>indices.push(468+k,id,ids[(i+1)%ids.length])));this.holeCount=indices.length-this.meshCount;
-      this.baseIndices=indices.slice();this.skirtBuffer=gl.createBuffer();this.skirtSignature='';
+      this.backgroundBuffer=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.backgroundBuffer);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array([471,472,473,473,472,474]),gl.STATIC_DRAW);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indices=gl.createBuffer());gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);this.reset();
     }
     setBackground(image,kind='captured'){
@@ -91,21 +92,21 @@
       const hasProfiles=key.referenceViews?.some(v=>v.side!=='front');
       const visibility=pose3D?(1-Q.smooth(key.referencePhoto ? .48 : .25,key.referencePhoto ? .85 : .62,Math.abs(yaw-(key.yaw??yaw))))*(1-Q.smooth(hasProfiles?1.30:1.05,1.50,Math.abs(yaw))):Q.smooth(0,.10,.24-Math.abs(yaw-(key.yaw??yaw)))*(1-Q.smooth(.58,.82,Math.abs(yaw)));
       if(visibility<=0||basis.scale<15){this.hide();return false;}
-      const backgroundReady=this.updateBackground(frame,cameraPoints,points.stamp??now);this.shape.range=backgroundReady ? .42 : .25;
+      const backgroundReady=this.updateBackground(frame,cameraPoints,points.stamp??now);this.shape.range=backgroundReady ? .32 : .22;this.shape.allowContour=backgroundReady;
       const destination=this.shape.apply(points,key,(settings.shape??.82)*(settings.opacity??1)*visibility,now,this.triangles);
       if(this.canvas.width!==frame.width||this.canvas.height!==frame.height){this.canvas.width=frame.width;this.canvas.height=frame.height;}
       const eyeReference=key.generatedPoints&&key.referenceLayers?.length?key.referenceLayers.reduce((a,b)=>Math.abs(root.FacePose.basis(a.points,a.width).yaw-yaw)<Math.abs(root.FacePose.basis(b.points,b.width).yaw-yaw)?a:b):null;
       if(key!==this.key||eyeReference!==this.eyeReference){this.duration=eyeReference?0:Q.textureTransition(this.key,key);this.previous=this.duration?this.key:key;this.key=key;this.changed=now;this.eyeReference=eyeReference;this.referenceUV=eyeReference?.points.map(p=>({x:p.x/eyeReference.image.width,y:p.y/eyeReference.image.height}));this.upload(0,eyeReference?.image||this.previous.layer||this.previous.image);this.upload(1,key.layer||key.image);}
       if(root.ReferenceTone&&root.PortraitBlend&&settings.integrate!==false){
         if(!this.toneStats.has(key)){const im=key.image,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;this.toneStats.set(key,root.ReferenceTone.sample(im,key.uv.map(p=>({x:p.x*w,y:p.y*h}))));}
-        if(now-this.toneSampleAt>220){
+        if((settings.colorMode||'reference')!=='reference'&&now-this.toneSampleAt>220){
           this.toneSampleAt=now;const c=this.toneCanvas||(this.toneCanvas=document.createElement('canvas'));c.width=160;c.height=Math.max(1,Math.round(160*frame.height/frame.width));const x=c.getContext('2d',{willReadFrequently:true});
           if(frame.video&&frame.mirror){x.translate(c.width,0);x.scale(-1,1);}x.drawImage(frame.video||frame,0,0,c.width,c.height);
           this.liveTone=root.ReferenceTone.sample(c,cameraPoints.map(p=>({x:p.x*c.width/frame.width,y:p.y*c.height/frame.height})));
         }
         const source=this.toneStats.get(key);
         if(this.liveTone&&!this.toneTargetReady){this.toneFilter.value=this.liveTone.mean.slice();this.toneTargetReady=true;}
-        const target=this.liveTone?{mean:this.toneFilter.update(this.liveTone.mean,now)}:null,t=root.PortraitBlend.tone(source,target,settings.colorMode||'camera',settings.colorMix??.5);gl.uniform3f(this.uniforms.complexion,...t);
+        const target=this.liveTone?{mean:this.toneFilter.update(this.liveTone.mean,now)}:null,t=root.PortraitBlend.tone(source,target,settings.colorMode||'reference',settings.colorMix??.85,key.referenceTone);gl.uniform3f(this.uniforms.complexion,...t);
       }else gl.uniform3f(this.uniforms.complexion,0,0,0);
       const elapsed=this.drawTime===null?33:Math.max(1,Math.min(now-this.drawTime,100));this.drawTime=now;
       const liveExpression=Q.expression(points),nativeExpression=key.generatedPoints?Q.expression(key.generatedPoints):liveExpression;
@@ -113,20 +114,25 @@
       gl.uniform2f(this.uniforms.eyeAssist,this.eyeBlend[0],this.eyeBlend[1]);
       [[33,133,159,145],[263,362,386,374]].forEach(([a,b,t,d],k)=>{const w=Math.hypot(points[a].x-points[b].x,points[a].y-points[b].y),h=Math.hypot(points[t].x-points[d].x,points[t].y-points[d].y);gl.uniform4f(this.uniforms[k?'eyeB':'eyeA'],(points[a].x+points[b].x)/2/frame.width,(points[t].y+points[d].y)/2/frame.height,w*.65/frame.width,Math.max(h*.8,w*.07)/frame.height);});
       const transition=this.duration?clamp((now-this.changed)/this.duration,0,1):1;
-      gl.viewport(0,0,frame.width,frame.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);this.upload(2,frame.video||frame);
+      gl.viewport(0,0,frame.width,frame.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       gl.uniform1f(this.uniforms.transition,transition);gl.uniform1f(this.uniforms.intensity,(settings.opacity??1)*visibility);
       gl.uniform1f(this.uniforms.cameraMirror,frame.video&&frame.mirror?1:0);
-      gl.uniform1f(this.uniforms.feather,.035+(settings.softness??.5)*.08);gl.uniform1f(this.uniforms.matteA,this.previous.layer&&!this.previous.rectangularLayer?1:0);gl.uniform1f(this.uniforms.matteB,key.layer&&!key.rectangularLayer?1:0);
+      gl.uniform1f(this.uniforms.feather,.008+(settings.softness??.5)*.025);gl.uniform1f(this.uniforms.matteA,this.previous.layer&&!this.previous.rectangularLayer?1:0);gl.uniform1f(this.uniforms.matteB,key.layer&&!key.rectangularLayer?1:0);
       const registeredUV=k=>{if(!k.registrationFromUV)return k.uv;const t=clamp((now-k.registrationStarted)/80,0,1);if(t>=1){k.registrationFromUV=null;return k.uv;}return k.uv.map((p,i)=>({x:k.registrationFromUV[i].x+(p.x-k.registrationFromUV[i].x)*t,y:k.registrationFromUV[i].y+(p.y-k.registrationFromUV[i].y)*t}));};
       const amounts=Q.featureAmounts(points,settings),uvA=this.referenceUV||registeredUV(this.previous),uvB=registeredUV(key),data=this.data;
       const vertex=(i,p,cameraPoint,edge,own,hole=false,textureA=uvA[i],textureB=uvB[i],erase=1)=>{let k=i*12;data[k++]=p.x/frame.width*2-1;data[k++]=1-p.y/frame.height*2;data[k++]=clamp((p.z||0)*2-(hole ? .0002 : 0),-.95,.95);data[k++]=textureA?.x||0;data[k++]=textureA?.y||0;data[k++]=textureB?.x||0;data[k++]=textureB?.y||0;data[k++]=cameraPoint.x/frame.width;data[k++]=cameraPoint.y/frame.height;data[k++]=edge;data[k++]=own;data[k]=erase;};
       const stamp=points.stamp??now;if(this.boundaryStamp!==stamp){this.boundaryStamp=stamp;this.boundaryIds=Q.silhouetteIds(points);this.edgeValues=Q.silhouetteEdges(destination,Q.silhouetteIds(destination),pose3D?.scale||basis.scale);}
       const edges=key.layer&&this.previous.layer&&!key.rectangularLayer&&!this.previous.rectangularLayer?null:this.edgeValues;
-      const oralOpening=liveExpression[2],sourceOpening=key.sourcePoints?Q.expression(key.sourcePoints)[2]:oralOpening;
-      const liveOral=settings.identityLock&&settings.liveMouth!==false&&(root.PortraitBlend?root.PortraitBlend.oralMix(yaw,oralOpening,sourceOpening,key.referencePhoto,settings.liveMouth===true):Math.abs(yaw)<1.22&&(settings.liveMouth===true||oralOpening>.075));
-      this.oralBlend+=((liveOral?1:0)-this.oralBlend)*(1-Math.exp(-elapsed/35));
-      const oralMap=root.MouthMotion?.mapper(destination,cameraPoints),cameraAt=(p,i)=>{const w=this.oralRegion[i]*this.oralBlend;if(!oralMap||w<=0)return cameraPoints[i];const mapped=oralMap(p);return {x:cameraPoints[i].x+(mapped.x-cameraPoints[i].x)*w,y:cameraPoints[i].y+(mapped.y-cameraPoints[i].y)*w};};
-      for(let i=0;i<468;i++)vertex(i,destination[i],cameraAt(destination[i],i),edges?edges[i]:1,Math.max(this.oralRegion[i]*this.oralBlend,...this.regions[i].map((weight,k)=>weight*amounts[k])));
+      const liveOral=root.PortraitBlend.interiorWeight(yaw,liveExpression[2],settings.identityLock&&settings.liveMouth!==false);
+      this.oralBlend+=(liveOral-this.oralBlend)*(1-Math.exp(-elapsed/55));gl.uniform1f(this.uniforms.oralBlend,this.oralBlend);
+      // El vídeo nativo ya presenta el cuerpo. Solo subir otra copia si una
+      // región facial realmente necesita píxeles de cámara.
+      if(this.oralBlend>.002||amounts.some(v=>v>.002))this.upload(2,frame.video||frame);
+      const oralMap=root.MouthMotion?.interiorMapper(destination,root.MouthMotion.sanitize(cameraPoints));
+      for(let i=0;i<468;i++){
+        let own=0;for(let k=0;k<5;k++)own=Math.max(own,this.regions[i][k]*amounts[k]);
+        vertex(i,destination[i],this.innerMouth.has(i)&&oralMap?oralMap(destination[i]):cameraPoints[i],edges?edges[i]:1,own,false,uvA[i],uvB[i],0);
+      }
       const center=(ids,mesh)=>ids.reduce((p,i)=>({x:p.x+mesh[i].x/ids.length,y:p.y+mesh[i].y/ids.length,z:p.z+(mesh[i].z||0)/ids.length}),{x:0,y:0,z:0});
       HOLES.forEach((ids,k)=>{
         let target=center(ids,destination),textureA=center(ids,uvA),textureB=center(ids,uvB);
@@ -138,15 +144,13 @@
           const desiredX=clamp(((points[iris].x-liveCenter.x)*x+(points[iris].y-liveCenter.y)*y)/w,-.14,.14),desiredY=clamp((-(points[iris].x-liveCenter.x)*y+(points[iris].y-liveCenter.y)*x)/w,-maxY,maxY),g=this.gaze[k],alpha=1-Math.exp(-elapsed/65);g.x+=(desiredX-g.x)*alpha;g.y+=(desiredY-g.y)*alpha;const px=g.x,py=clamp(g.y,-maxY,maxY);
           target={...target,x:target.x+tx*px-ty*py,y:target.y+ty*px+tx*py};textureA=uvA[iris];textureB=uvB[iris];
         }
-        vertex(468+k,target,k===2&&oralMap?oralMap(target):center(ids,cameraPoints),1,k===2?Math.max(amounts[k],this.oralBlend):amounts[k],true,textureA,textureB);
+        vertex(468+k,target,k===2&&oralMap?oralMap(target):center(ids,cameraPoints),1,amounts[k],true,textureA,textureB,k===2?1:0);
       });
-      const skirt=Q.silhouetteSkirt(points,destination,frame.width,this.boundaryIds),signature=this.boundaryIds.join(',')+'|'+Number(backgroundReady),quadStart=471+skirt.length;skirt.forEach((p,i)=>vertex(471+i,p.destination,p.source,0,1,false,{x:0,y:0},{x:0,y:0},0));
-      if(backgroundReady){const [x0,y0,x1,y1]=this.backgroundRect;[[x0,y0],[x1,y0],[x0,y1],[x1,y1]].forEach(([x,y],i)=>vertex(quadStart+i,{x,y,z:0},{x,y},0,1,false,{x:0,y:0},{x:0,y:0}));}
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.skirtBuffer);if(signature!==this.skirtSignature){const indices=this.baseIndices.slice();if(backgroundReady)indices.push(quadStart,quadStart+1,quadStart+2,quadStart+2,quadStart+1,quadStart+3);else skirt.forEach((p,i)=>{const j=(i+1)%skirt.length;indices.push(p.id,skirt[j].id,471+i,skirt[j].id,471+j,471+i);});this.backgroundCount=indices.length;gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.DYNAMIC_DRAW);this.skirtSignature=signature;}
-      gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,data.subarray(0,(quadStart+(backgroundReady?4:0))*12));
-      // Recoloca la captura bajo el nuevo mentón y borra el contorno anterior.
-      // Con fondo preparado se retira el contorno original; sin él se reproyecta la captura.
-      gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.uniform1f(this.uniforms.onlyLive,2);gl.drawElements(gl.TRIANGLES,this.backgroundCount-this.baseIndices.length,gl.UNSIGNED_SHORT,this.baseIndices.length*2);
+      if(backgroundReady){const [x0,y0,x1,y1]=this.backgroundRect;[[x0,y0],[x1,y0],[x0,y1],[x1,y1]].forEach(([x,y],i)=>vertex(471+i,{x,y,z:0},{x,y},0,1,false,{x:0,y:0},{x:0,y:0}));}
+      gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,data.subarray(0,(backgroundReady?475:471)*12));
+      // Nunca estirar cuello, ropa o fondo para esconder el contorno anterior.
+      // Solo un fondo preparado permite retirar la silueta original.
+      if(backgroundReady){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.backgroundBuffer);gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.uniform1f(this.uniforms.onlyLive,2);gl.drawElements(gl.TRIANGLES,6,gl.UNSIGNED_SHORT,0);}
       gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indices);gl.uniform1f(this.uniforms.onlyLive,0);gl.drawElements(gl.TRIANGLES,this.meshCount,gl.UNSIGNED_SHORT,0);
       let offset=this.meshCount;const eyeWidth=k=>{const [a,b]=k?[263,362]:[33,133];return Math.hypot(points[a].x-points[b].x,points[a].y-points[b].y);};

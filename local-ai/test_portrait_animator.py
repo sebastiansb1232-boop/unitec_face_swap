@@ -1,6 +1,7 @@
 import unittest
 import numpy as np
-from portrait_animator import rotation,transform_motion,expression_transfer,choose_view
+from portrait_animator import rotation,transform_motion,expression_transfer,choose_view,facial_ratios,retarget_goals,bounded_residual,PortraitAnimator
+from unittest.mock import Mock
 
 class AvatarTests(unittest.TestCase):
     def test_expression_limit_is_smooth_and_more_conservative_in_profile(self):
@@ -26,3 +27,24 @@ class AvatarTests(unittest.TestCase):
         self.assertEqual(choose_view(views,30,None),2)
         self.assertEqual(choose_view(views,27,1),1)
         self.assertEqual(choose_view(views,40,1),2)
+
+    def test_retargeting_keeps_source_ratios_at_neutral_and_clamps_extremes(self):
+        source=np.array([.22,.18,.04],np.float32);neutral=np.array([.3,.25,.02],np.float32)
+        goals=retarget_goals(source,neutral,neutral);np.testing.assert_allclose(goals,[.2,.04],atol=1e-6)
+        eyes,mouth=retarget_goals(source,np.array([6,6,9]),neutral);self.assertLessEqual(eyes,.6);self.assertLessEqual(mouth,.85)
+        eyes,mouth=retarget_goals(source,np.zeros(3),neutral);self.assertEqual(eyes,0);self.assertGreaterEqual(mouth,0)
+
+    def test_retargeting_residual_does_not_replace_source_anatomy(self):
+        zero=np.zeros((1,21,3),np.float32);np.testing.assert_array_equal(bounded_residual(zero),zero)
+        out=bounded_residual(np.full_like(zero,8));self.assertLess(float(np.linalg.norm(out,axis=-1).max()),.046)
+
+    def test_tongue_outlier_does_not_control_mouth_retargeting(self):
+        p=np.zeros((468,2),np.float32);p[61]=[0,0];p[291]=[100,0]
+        for a,b in [(13,14),(82,87),(312,317)]:p[a]=[40,0];p[b]=[40,20]
+        p[14]=[40,1000];self.assertAlmostEqual(float(facial_ratios(p)[2]),.2,places=6)
+
+    def test_retargeter_input_contract_is_66_for_eyes_and_65_for_lips(self):
+        avatar=PortraitAnimator.__new__(PortraitAnimator);session=Mock();session.run.return_value=[np.zeros((1,21,3),np.float32)];avatar.retargeters={'eye':session,'lip':session}
+        points=np.zeros((1,21,3),np.float32);ratios=np.array([.2,.25,.04],np.float32)
+        for kind,size in [('eye',66),('lip',65)]:
+            result=avatar.retarget(kind,points,ratios,.3);feed=session.run.call_args.args[1]['input'];self.assertEqual(feed.shape,(1,size));self.assertEqual(result.shape,(1,21,3));self.assertEqual(feed.dtype,np.float32)

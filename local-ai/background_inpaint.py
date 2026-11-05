@@ -3,12 +3,15 @@ from pathlib import Path
 import base64
 import gc
 import time
+import json
+import subprocess
+import sys
+import os
 import cv2
 import numpy as np
 import onnxruntime as ort
 from engine import decode_image, points_array
 from model_config import model_manifest
-from runtime_config import provider_plan
 
 def installed(folder):
     item=next(x for x in model_manifest() if x.get('group')=='background')
@@ -41,25 +44,48 @@ def restore(image,mask,output,rect):
     alpha=(mask/255).astype(np.float32)[:,:,None]
     return np.uint8(np.clip(np.rint(image*(1-alpha)+fill*alpha),0,255))
 
-def generate(folder,image_data,landmarks,requested='auto',device=0,threads=2):
-    if not installed(folder):raise ValueError('Falta LaMa. Ejecuta instalar-relleno-ia.bat y reinicia el motor.')
+class BackgroundError(RuntimeError):
+    pass
+
+def generate(folder,image_data,landmarks,requested='cpu',device=0,threads=2):
+    # LaMa usa FFT exportada mediante MatMul: el registro del usuario demuestra
+    # que ese grafo falla en su DirectML. Nunca intentar DML ni una segunda
+    # sesión en el mismo proceso después de un error de asignación.
+    if not installed(folder):raise ValueError('Falta LaMa. Ejecuta instalar-relleno-ia.bat.')
     image=decode_image(image_data);points=points_array(landmarks,image.shape);mask=removal_mask(image.shape,points);feed,rect=inputs(image,mask)
-    started=time.perf_counter();session=None;last_error=None
+    started=time.perf_counter();session=None
     try:
-        for provider,options in provider_plan(ort.get_available_providers(),requested,device):
-            try:
-                opts=ort.SessionOptions();opts.intra_op_num_threads=max(1,min(4,int(threads)));opts.inter_op_num_threads=1
-                opts.enable_mem_pattern=provider!='DmlExecutionProvider';opts.log_severity_level=3
-                opts.add_session_config_entry('session.intra_op.allow_spinning','0')
-                providers=[(provider,options),'CPUExecutionProvider'] if provider!='CPUExecutionProvider' else [provider]
-                session=ort.InferenceSession(str(Path(folder)/'lama_fp32.onnx'),sess_options=opts,providers=providers)
-                output=session.run(None,feed)[0];result=restore(image,mask,output,rect)
-                ok,jpeg=cv2.imencode('.jpg',result,[cv2.IMWRITE_JPEG_QUALITY,95])
-                if not ok:raise RuntimeError('No se pudo codificar el fondo.')
-                return {'image':'data:image/jpeg;base64,'+base64.b64encode(jpeg).decode('ascii'),'model':'lama_fp32','provider':session.get_providers()[0],'ms':round((time.perf_counter()-started)*1000),'width':image.shape[1],'height':image.shape[0]}
-            except Exception as error:
-                last_error=error;session=None;gc.collect()
-        raise RuntimeError('No se pudo generar el fondo con los proveedores disponibles.') from last_error
+        opts=ort.SessionOptions();opts.intra_op_num_threads=max(1,min(2,int(threads)));opts.inter_op_num_threads=1
+        opts.execution_mode=ort.ExecutionMode.ORT_SEQUENTIAL;opts.enable_mem_pattern=False;opts.enable_cpu_mem_arena=False
+        opts.graph_optimization_level=ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED;opts.log_severity_level=3
+        opts.add_session_config_entry('session.intra_op.allow_spinning','0')
+        session=ort.InferenceSession(str(Path(folder)/'lama_fp32.onnx'),sess_options=opts,providers=['CPUExecutionProvider'])
+        output=session.run(None,feed)[0];result=restore(image,mask,output,rect)
+        ok,jpeg=cv2.imencode('.jpg',result,[cv2.IMWRITE_JPEG_QUALITY,95])
+        if not ok:raise RuntimeError('No se pudo codificar el fondo.')
+        return {'image':'data:image/jpeg;base64,'+base64.b64encode(jpeg).decode('ascii'),'model':'lama_fp32','provider':'CPUExecutionProvider','ms':round((time.perf_counter()-started)*1000),'width':image.shape[1],'height':image.shape[0]}
     finally:
-        # Reservar recursos a LivePortrait una vez preparada la imagen.
         session=None;gc.collect()
+
+def generate_isolated(folder,image_data,landmarks,threads=2):
+    payload=json.dumps({'folder':str(folder),'image':image_data,'points':landmarks,'threads':min(2,threads)})
+    child_env=os.environ.copy();child_env['OMP_NUM_THREADS']='2';child_env['OPENBLAS_NUM_THREADS']='1'
+    try:
+        child=subprocess.run([sys.executable,str(Path(__file__).resolve()),'--worker'],input=payload,text=True,encoding='utf-8',stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=75,env=child_env,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    except subprocess.TimeoutExpired:
+        raise BackgroundError('El relleno tardó demasiado. Usa Capturar fondo.') from None
+    if child.returncode:
+        raise BackgroundError('LaMa no pudo reservar memoria o procesar la imagen. Usa Capturar fondo.') from None
+    try:
+        result=json.loads(child.stdout)
+        if result.get('model')!='lama_fp32' or not result.get('image','').startswith('data:image/jpeg;base64,'):raise ValueError()
+        return result
+    except (ValueError,AttributeError):raise BackgroundError('LaMa no devolvió un fondo válido. Usa Capturar fondo.') from None
+
+if __name__=='__main__' and '--worker' in sys.argv:
+    try:
+        item=json.load(sys.stdin);result=generate(item['folder'],item['image'],item['points'],threads=item.get('threads',2))
+        sys.stdout.write(json.dumps(result));sys.stdout.flush()
+    except Exception:
+        # El proceso padre informa del fallo sin volcar imágenes ni credenciales.
+        sys.exit(1)

@@ -67,11 +67,14 @@ test('priorizar identidad no sustituye automáticamente ojos o piel al parpadear
  const amounts=Q.featureAmounts(points,{identityLock:true,eyes:0,mouth:0,forehead:0,chin:0});assert.deepEqual(amounts,[0,0,0,0,0]);
 });
 
-test('la calibración y el moldeado conservan la identidad al reutilizar un fotograma',()=>{
+test('la geometría se reutiliza entre detecciones sin recalibrar y responde al control de intensidad',()=>{
  const driver=canonical(),target=canonical();target[152].y-=.2;
  const front=view(driver);front.stamp=1;const key={width:600,sourcePoints:front,referenceViews:[{side:'front',points:view(target),width:600}],referenceId:'stable'},shape=new Q.IdentityShape();
- for(let i=0;i<40;i++)shape.apply(front,key,1,i*33,[]);
- assert.equal(shape.calibrationCount,1);const a=shape.apply(front,key,1,1400,[]);shape.apply(front,key,0,1433,[]);const b=shape.apply(front,key,1,1466,[]);assert.ok(b[152].y>a[152].y); // El control reaparece gradualmente.
+ const first=shape.apply(front,key,1,0,[]);for(let i=1;i<40;i++)shape.apply(front,key,1,i*33,[]);
+ assert.equal(shape.calibrationCount,1);assert.deepEqual(shape.apply(front,key,1,1400,[]),first);
+ let settled;for(let i=2;i<42;i++){front.stamp=i;settled=shape.apply(front,key,1,1400+i*33,[]);}
+ const off=shape.apply(front,key,0,2850,[]);off.forEach((p,i)=>assert.ok(Math.hypot(p.x-front[i].x,p.y-front[i].y)<1e-7));
+ const back=shape.apply(front,key,1,2883,[]);assert.ok(back[152].y>settled[152].y);
 });
 
 test('cada perfil conserva su geometría propia sin imponerle los labios de la frontal',()=>{
@@ -89,3 +92,11 @@ test('los gestos cambian párpados y labios sin arrastrar la nariz con residuos 
  assert.ok(out[14].y-out[13].y>neutral[14].y-neutral[13].y);
  assert.ok(Math.hypot(out[1].x-neutral[1].x,out[1].y-neutral[1].y)<1e-5);
 });
+test('sin fondo preparado la silueta se conserva aunque cambien las proporciones interiores',()=>{
+ const live=view(canonical()),reference=canonical();for(const p of reference){p.x*=.78;p.y*=.9;}
+ const key={width:600,sourcePoints:live,referenceViews:[{side:'front',points:view(reference),width:600}],referenceId:'silhouette'},shape=new Q.IdentityShape();shape.allowContour=false;
+ let result;for(let i=0;i<20;i++){live.stamp=i;result=shape.apply(live,key,1,i*33,[]);}
+ for(const id of Q.silhouetteIds(live))assert.ok(Math.hypot(result[id].x-live[id].x,result[id].y-live[id].y)<1e-5);
+ shape.allowContour=true;const expanded=shape.apply(live,key,1,700,[]);assert.ok(Math.abs(expanded[152].y-live[152].y)>1);
+});
+test('un punto interior desviado hacia cuello o cuerpo no amplía la máscara de fondo',()=>{const p=view(canonical());p[200].y=2000;p[14].y=2000;const ids=Q.silhouetteIds(p);assert.ok(!ids.includes(200));assert.ok(!ids.includes(14));p[1].x=2000;assert.ok(Q.silhouetteIds(p).includes(1));});

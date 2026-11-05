@@ -243,6 +243,15 @@ class FaceEngine:
         self.sources = {}
         print('Another Face · '+self.model_name+' · '+str(self.native_size)+' px nativos · motor '+self.provider+' · '+str(self.threads)+' hilos CPU'+(' · GPU '+str(self.device) if self.provider!='CPUExecutionProvider' else ''),flush=True)
 
+    def close(self):
+        """Liberar sesiones antes de cargar otro generador pesado."""
+        self.sources.clear();self.inputs=[];self.swapper=None;self.recognizer=None
+        avatar=getattr(self,'avatar',None)
+        if avatar is not None:
+            avatar.sessions.clear();avatar.generator=None;avatar.benchmark_feed=None
+            avatar.retargeters.clear();self.avatar=None
+        self.projection=None;gc.collect()
+
     def identity_embedding(self, image_data, landmark_data):
         image = decode_image(image_data); points = points_array(landmark_data, image.shape)
         matrix = alignment(five_points(points),112)
@@ -275,7 +284,7 @@ class FaceEngine:
             crops=[]
             for view in [{'side':'front','image':image_data,'points':landmark_data},*(views or [])]:
                 picture=decode_image(view['image']);mesh=points_array(view['points'],picture.shape);matrix=alignment(five_points(mesh),512,FFHQ)
-                crops.append({'side':view['side'],'image':cv2.warpAffine(picture,matrix,(512,512),flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_REFLECT_101)})
+                crops.append({'side':view['side'],'image':cv2.warpAffine(picture,matrix,(512,512),flags=cv2.INTER_LINEAR,borderMode=cv2.BORDER_REFLECT_101),'points':transform(mesh,matrix)})
             record['avatar']=self.avatar.prepare(crops)
         token = secrets.token_urlsafe(24); self.sources[token]=(record,now)
         return token
@@ -317,7 +326,7 @@ class FaceEngine:
             return np.clip((pixels*.5+.5 if hyper else pixels)*255,0,255)
         inference_started=time.perf_counter()
         quality='balanced' if avatar else settings.get('quality','balanced');active_view='front'
-        if avatar:generated,active_view=self.avatar.render(source['avatar'],target,settings.get('driver_id',0),emphasis);passes=1
+        if avatar:generated,active_view=self.avatar.render(source['avatar'],target,settings.get('driver_id',0),emphasis,transform(points,matrix));passes=1
         else:generated,passes=pixel_boost(target,infer,quality,native_size)
         inference_ms=(time.perf_counter()-inference_started)*1000
         aligned_points=transform(points,matrix)
@@ -348,4 +357,4 @@ class FaceEngine:
         gray=cv2.cvtColor(target,cv2.COLOR_BGR2GRAY)
         light_luma=float(np.median(gray[core])/255) if core.any() else .4
         elapsed=(time.perf_counter()-request_started)*1000
-        return {'image':'data:image/jpeg;base64,'+base64.b64encode(jpeg).decode('ascii'),'layer':layer_data,'transport':'patch' if compact else 'legacy','matte_kind':'mesh' if compact or avatar else 'alpha','active_view':active_view,'affine':matrix.flatten().tolist() if compact else None,'texture_size':size if compact else None,'reference_views':source.get('views',1) if isinstance(source,dict) else 1,'identity_strength':emphasis,'light_luma':round(light_luma,4),'render_protocol':5,'model':getattr(self,'model_name','inswapper_128_fp16'),'native_size':native_size,'output_size':int(generated.shape[0]),'quality':quality,'passes':passes,'ms':round(elapsed),'provider':self.provider,'timing':{'inference_ms':round(inference_ms,1),'other_ms':round(elapsed-inference_ms,1)}}
+        return {'image':'data:image/jpeg;base64,'+base64.b64encode(jpeg).decode('ascii'),'layer':layer_data,'transport':'patch' if compact else 'legacy','matte_kind':'mesh' if compact or avatar else 'alpha','active_view':active_view,'affine':matrix.flatten().tolist() if compact else None,'texture_size':size if compact else None,'reference_views':source.get('views',1) if isinstance(source,dict) else 1,'identity_strength':emphasis,'light_luma':round(light_luma,4),'gesture_retargeting':bool(getattr(getattr(self,'avatar',None),'retargeters',None)),'render_protocol':5,'model':getattr(self,'model_name','inswapper_128_fp16'),'native_size':native_size,'output_size':int(generated.shape[0]),'quality':quality,'passes':passes,'ms':round(elapsed),'provider':self.provider,'timing':{'inference_ms':round(inference_ms,1),'other_ms':round(elapsed-inference_ms,1)}}

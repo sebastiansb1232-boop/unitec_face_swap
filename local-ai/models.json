@@ -61,5 +61,23 @@
     "group": "background",
     "license": "Apache-2.0",
     "source": "https://github.com/advimman/lama"
+  },
+  {
+    "name": "live_portrait_eye_retargeter.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/live_portrait_eye_retargeter.onnx?download=true",
+    "bytes": 581421,
+    "sha256": "13cf8b06f0a314e6e65b4a47fea5ce270edb79cd54359c4d273f2c139820276b",
+    "optional": true,
+    "group": "avatar",
+    "enhancement": true
+  },
+  {
+    "name": "live_portrait_lip_retargeter.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/live_portrait_lip_retargeter.onnx?download=true",
+    "bytes": 151022,
+    "sha256": "0f5b76344d0bfbb44c8a0b1ec57a4a7c36fd38db530338777a48c4a33a02d71f",
+    "optional": true,
+    "group": "avatar",
+    "enhancement": true
   }
 ]

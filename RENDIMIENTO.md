@@ -1,4 +1,4 @@
-# Rendimiento · Another Face 1.12.0
+# Rendimiento · Another Face 1.13.0
 
 ## Qué hace cada motor
 
@@ -8,7 +8,9 @@ La cámara solicita 30 FPS, hasta 60 si están disponibles. El seguimiento traba
 
 Se mantiene una solicitud facial en vuelo, se descartan muestras antiguas y se respeta la espera del motor ocupado. El resultado se transporta como una textura JPEG de calidad 95 con registro facial. Se reutilizan texturas y buffers; el color se calcula desde una copia pequeña aproximadamente cuatro veces por segundo y su objetivo se suaviza. La segmentación de referencia se prepara al cargar cada foto. Se elimina la antigua ganancia global de luz y sus lecturas redundantes.
 
-LaMa comparte el bloqueo de inferencia: preparar un fondo pausa los envíos faciales hasta terminar. Después se reutilizan la imagen preparada y una máscara gráfica del contorno. Sin fondo preparado se conserva la reproyección anterior; con él se permiten cambios geométricos algo mayores sin dejar la silueta original visible.
+LaMa comparte el bloqueo de inferencia. Primero se liberan las sesiones faciales, el relleno se ejecuta en un hijo de CPU y se reconstruye el motor cuando ese hijo termina. No se intenta LaMa en DirectML ni una sesión adicional tras su error de MatMul. Esta operación es de preparación, no una generación por fotograma.
+
+La geometría se actualiza con una detección nueva y se reproyecta entre muestras. El buffer gráfico baja de 45264 a 22800 bytes. Cuando la boca está cerrada y no se mezclan rasgos originales, se evita subir otra textura completa de cámara. El seguimiento conserva una entrada pequeña de video; la copia grande para el generador solo se prepara cuando puede enviarse una inferencia. No se acumulan copias mientras el motor está ocupado.
 
 ## Contadores y mediciones
 
@@ -20,9 +22,17 @@ LaMa comparte el bloqueo de inferencia: preparar un fondo pausa los envíos faci
 
 Avatar fotográfico no incrementa Generación IA. Reutilizar una textura o predecir una pose no cuenta como una generación. El video nativo puede refrescarse por separado de la textura facial.
 
-En las pruebas actuales de página completa con cámara simulada, gráficos por software y modelos reales en CPU, la vista rondó **10–28 FPS** y el seguimiento **6–14 FPS**. LivePortrait necesitó **14,9–16,5 segundos** de inferencia para una salida de 512; la primera solicitud observada, con preparación, tardó entre 18,5 y 21,1 segundos. La prueba aislada de LaMa tardó **15,2 segundos** para preparar un fondo de 512 × 600, procesado internamente a 512 con márgenes que conservan la proporción.
+En la página completa con cámara simulada, gráficos por software y modelos reales en CPU, se observaron aproximadamente **12–30 composiciones/s**, **7–17 detecciones/s** y unos **15–17 segundos** de inferencia LivePortrait. Se ejecutaron además el relleno aislado, la reconstrucción del motor y una nueva generación con un token actualizado. Estas medidas no corresponden a DirectML físico ni garantizan una frecuencia en tu PC.
 
-No son medidas de la GPU del usuario ni una comparación controlada con la versión anterior. Se comprobaron los botones de ambos fondos, las tres referencias, los tonos, el registro, los píxeles de boca y contorno, la captura y el guardado simulado, sin errores WebGL. Las pruebas sintéticas de boca no sustituyen una secuencia original con la lengua en movimiento. No se han probado dispositivos móviles físicos ni CUDA/DirectML en una GPU física.
+Comparación local del compositor, con el mismo tamaño de 512 × 600, referencias, ajustes, fondo preparado y una muestra de seguimiento por cada tres dibujos. Se descartan 30 dibujos y se miden 90, sincronizando WebGL:
+
+| Medición | 1.12 | 1.13 |
+| --- | ---: | ---: |
+| Mediana por composición | 1,4 ms | 0,7 ms |
+| Percentil 90 | 8,3 ms | 4,2 ms |
+| Buffer dinámico | 45264 bytes | 22800 bytes |
+
+Es una prueba del compositor en software, sin cámara física, red ni generación durante las muestras. Las correcciones también modifican el contorno y la mezcla, por lo que no es una comparación del mismo resultado píxel a píxel. No convierte esos tiempos en FPS de generación neuronal ni prueba una duplicación de FPS en hardware real. La eliminación de copias redundantes se comprobó por separado.
 
 ## Medir en tu PC
 
@@ -49,7 +59,7 @@ $env:ANOTHERFACE_THREADS="4"
 npm.cmd run start:worker
 ```
 
-Proveedor admite auto, cuda, dml y cpu; hilos, de 1 a 8. LaMa limita su preparación a cuatro hilos. El índice de GPU se pasa al proveedor; no se descubre automáticamente la más rápida. Un número mayor de hilos puede competir con el navegador.
+Proveedor admite auto, cuda, dml y cpu; hilos, de 1 a 8. LaMa limita su preparación a cuatro hilos. Los dos ajustes opcionales de ojos y labios utilizan un hilo CPU y suman 0,74 MB de pesos. El índice de GPU se pasa al proveedor; no se descubre automáticamente la más rápida. Un número mayor de hilos puede competir con el navegador.
 
 ## Fuentes
 

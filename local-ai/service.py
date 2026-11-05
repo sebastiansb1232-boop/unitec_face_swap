@@ -10,10 +10,11 @@ from pydantic import BaseModel, Field
 from api_auth import APIAuth, APIAuthMiddleware
 api_auth=APIAuth(os.getenv('ANOTHERFACE_AI_TOKEN','').strip(),os.getenv('ANOTHERFACE_REQUIRE_AUTH')=='1')
 from engine import FaceEngine
-from background_inpaint import installed as background_installed, generate as generate_background
+from background_inpaint import installed as background_installed, generate_isolated as generate_background
 
 engine = None
 busy = asyncio.Lock()
+background_working = False
 
 @asynccontextmanager
 async def lifespan(app):
@@ -64,13 +65,20 @@ class FrameInput(ImageInput):
 
 @app.get('/healthz')
 async def health():
-    return {'ready':engine is not None,'background_available':background_installed(os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))),'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':11,'app_version':'1.12.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
+    return {'ready':engine is not None and not background_working,'background_busy':background_working,'background_safe':True,'gesture_retargeting':bool(getattr(getattr(engine,'avatar',None),'retargeters',None)),'background_available':background_installed(os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))),'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':12,'app_version':'1.13.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
 
 async def execute(fn,*args):
     if engine is None: raise HTTPException(503,'El motor todavía se está cargando.')
     if busy.locked(): raise HTTPException(429,'El motor está ocupado; se descarta este fotograma.',headers={'Retry-After':'1'})
     async with busy:
-        try: return await asyncio.to_thread(fn,*args)
+        task=asyncio.create_task(asyncio.to_thread(fn,*args))
+        try: return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Cancelar HTTP no cancela ONNX ni el proceso hijo: conservar el
+            # bloqueo hasta que termine para impedir sesiones superpuestas.
+            try:await task
+            except Exception:pass
+            raise
         except KeyError as e: raise HTTPException(410,str(e).strip("'")) from e
         except ValueError as e: raise HTTPException(400,str(e)) from e
         except Exception as e:
@@ -85,15 +93,38 @@ async def reference(data:ReferenceInput):
 
 @app.post('/frame')
 async def frame(data:FrameInput):
-    if data.client_protocol<5 or data.settings.transport!='patch':raise HTTPException(426,'Actualiza el código de Render, recarga la página y reinicia el motor de la PC con la entrega 1.10.')
+    if data.client_protocol<5 or data.settings.transport!='patch':raise HTTPException(426,'Actualiza el código de Render, recarga la página y reinicia el motor de la PC con la misma entrega.')
     if engine is None: raise HTTPException(503,'Motor no disponible.')
     return await execute(engine.frame,data.reference_id,data.image,data.points,data.settings.model_dump())
+
+def prepare_background(folder,image,points,threads):
+    global engine,background_working
+    background_working=True
+    try:
+        # El bloqueo de execute impide usar estas sesiones durante la pausa.
+        print('Fondo IA · liberando el motor facial para preparar LaMa en CPU…',flush=True)
+        engine.close()
+        try:
+            result=generate_background(folder,image,points,min(2,threads))
+        finally:
+            # El hijo de LaMa ya terminó antes de volver a cargar LivePortrait.
+            print('Fondo IA · relleno terminado; reanudando el motor facial…',flush=True)
+            engine=None
+            engine=FaceEngine(folder)
+        result['engine_reloaded']=True
+        return result
+    finally:
+        background_working=False
 
 @app.post('/background')
 async def background(data:ImageInput):
     folder=os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))
     if not background_installed(folder):raise HTTPException(409,'Falta LaMa. Ejecuta instalar-relleno-ia.bat y reinicia el motor.')
-    return await execute(generate_background,folder,data.image,data.points,os.getenv('ANOTHERFACE_PROVIDER','auto'),int(os.getenv('ANOTHERFACE_GPU_DEVICE','0')),min(getattr(engine,'threads',2),4))
+    try:
+        return await execute(prepare_background,folder,data.image,data.points,getattr(engine,'threads',2))
+    except HTTPException as error:
+        if error.status_code==503:raise HTTPException(503,'No se pudo preparar el fondo. Usa Capturar fondo; si el motor quedó desconectado, reinícialo.') from None
+        raise
 
 if __name__=='__main__':
     import uvicorn

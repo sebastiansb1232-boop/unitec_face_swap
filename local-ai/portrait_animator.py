@@ -13,6 +13,23 @@ import onnxruntime as ort
 
 FILES={'feature':'live_portrait_feature_extractor.onnx','motion':'live_portrait_motion_extractor.onnx','generator':'live_portrait_generator.onnx','stitch':'live_portrait_stitcher.onnx'}
 
+def facial_ratios(points):
+    if points is None or len(points)<468:return None
+    p=np.asarray(points,np.float32);span=lambda a,b:max(float(np.linalg.norm(p[a]-p[b])),1.)
+    eyes=[np.clip(span(t,d)/span(a,b),0,.6) for a,b,t,d in [(33,133,159,145),(263,362,386,374)]]
+    mouth=float(np.median([np.linalg.norm(p[a]-p[b])/span(61,291) for a,b in [(13,14),(82,87),(312,317)]]))
+    return np.asarray([*eyes,np.clip(mouth,0,.9)],np.float32)
+
+def retarget_goals(source,driver,neutral):
+    # Apertura relativa: conservar las proporciones del retrato al calibrar.
+    eyes=np.clip(source[:2].mean()*driver[:2].mean()/max(float(neutral[:2].mean()),.04),0,.6)
+    mouth=np.clip(source[2]+driver[2]-neutral[2],0,.85)
+    return float(eyes),float(mouth)
+
+def bounded_residual(delta,limit=.045):
+    norm=np.linalg.norm(delta,axis=-1,keepdims=True)
+    return delta*(limit/np.sqrt(norm*norm+limit*limit))
+
 def rotation(pitch,yaw,roll):
     x,y,z=np.deg2rad([float(pitch),float(yaw),float(roll)])
     cx,sx=np.cos(x),np.sin(x);cy,sy=np.cos(y),np.sin(y);cz,sz=np.cos(z),np.sin(z)
@@ -44,7 +61,7 @@ def choose_view(views,yaw,previous=None,hysteresis=9):
 
 class PortraitAnimator:
     def __init__(self,folder,plan,options_factory):
-        self.sessions={};warnings=[]
+        self.sessions={};self.retargeters={};warnings=[]
         for provider,options in plan:
             candidate={}
             try:
@@ -66,6 +83,14 @@ class PortraitAnimator:
         if not self.sessions:raise RuntimeError('No se pudo cargar Avatar.')
         self.warning=' '.join(warnings) or None
         self.generator=self.sessions['generator']
+        # Dos redes pequeñas de LivePortrait (< 1 MB juntas), en CPU para no
+        # reservar otra sesión DirectML ni competir por la memoria de la GPU.
+        for kind in ['eye','lip']:
+            file=Path(folder)/('live_portrait_'+kind+'_retargeter.onnx')
+            if file.is_file():
+                try:self.retargeters[kind]=ort.InferenceSession(str(file),sess_options=options_factory(False,threads=1),providers=['CPUExecutionProvider'])
+                except Exception:warnings.append('No se pudo cargar el ajuste de '+kind+'.')
+        self.warning=' '.join(warnings) or None
 
     @staticmethod
     def tensor(image):
@@ -81,17 +106,35 @@ class PortraitAnimator:
         for crop in crops:
             tensor=self.tensor(crop['image']);motion=self.extract_motion_tensor(tensor)
             feature=self.sessions['feature'].run(None,{'input':tensor})[0]
-            views.append({'side':crop['side'],'yaw':float(motion['yaw']),'motion':motion,'feature':feature,'points':transform_motion(motion)})
+            points=transform_motion(motion);ratios=facial_ratios(crop.get('points'))
+            view={'side':crop['side'],'yaw':float(motion['yaw']),'motion':motion,'feature':feature,'points':points,'ratios':ratios}
+            if ratios is not None:
+                for kind in self.retargeters:view[kind+'_baseline']=self.retarget(kind,points,ratios,float(ratios[:2].mean() if kind=='eye' else ratios[2]))
+            views.append(view)
         return {'views':views,'driver_id':None,'neutral':None,'active':None}
 
-    def render(self,state,crop,driver_id,strength):
+    def retarget(self,kind,points,ratios,goal):
+        values=[*ratios[:2],goal] if kind=='eye' else [ratios[2],goal]
+        feed=np.concatenate([points.reshape(-1),np.asarray(values,np.float32)])[None].astype(np.float32)
+        output=self.retargeters[kind].run(None,{'input':feed})[0]
+        if output.size!=63 or not np.isfinite(output).all():raise RuntimeError('Ajuste de gesto no válido.')
+        return output.reshape(1,21,3)
+
+    def render(self,state,crop,driver_id,strength,landmarks=None):
         driving=self.extract_motion_tensor(self.tensor(crop))
+        ratios=facial_ratios(landmarks)
         if state['neutral'] is None or state['driver_id']!=driver_id:
-            state['neutral']={k:v.copy() for k,v in driving.items()};state['driver_id']=driver_id
+            state['neutral']={k:v.copy() for k,v in driving.items()};state['driver_id']=driver_id;state['neutral_ratios']=ratios
         index=choose_view(state['views'],float(driving['yaw']),state['active']);state['active']=index;source=state['views'][index]
         expression=expression_transfer(source['motion']['expression'],driving['expression'],state['neutral']['expression'],strength,float(driving['yaw']))
         angles=[np.clip(float(driving[k]),-limit,limit) for k,limit in [('pitch',40),('yaw',80),('roll',50)]]
         target=transform_motion(source['motion'],angles,expression)
+        if ratios is not None and source['ratios'] is not None and state.get('neutral_ratios') is not None:
+            goals=retarget_goals(source['ratios'],ratios,state['neutral_ratios']);correction=np.zeros_like(target)
+            for kind,goal in zip(['eye','lip'],goals):
+                if kind in self.retargeters:correction+=bounded_residual(self.retarget(kind,source['points'],source['ratios'],goal)-source[kind+'_baseline'])*.55
+            delta_rotation=rotation(*angles)@rotation(*[source['motion'][k] for k in ['pitch','yaw','roll']]).T
+            target+=correction@delta_rotation.T
         stitched=self.sessions['stitch'].run(None,{'source':target,'target':source['points']})[0]
         image=self.generator.run(None,{'feature_volume':source['feature'],'source':stitched,'target':source['points']})[0]
         pixels=np.clip(image[0].transpose(1,2,0)[:,:,::-1]*255,0,255)

@@ -14,7 +14,7 @@ def digest(path):
     return h.hexdigest()
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--destination',type=Path,default=Path(__file__).parent/'models');p.add_argument('--portrait',action='store_true',help='Incluye HyperSwap 1C 256 (403 MB adicionales).');p.add_argument('--avatar',action='store_true',help='Incluye LivePortrait 512 (338 MB adicionales).');p.add_argument('--background',action='store_true',help='Descarga solo LaMa para relleno de fondo (208 MB).');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--destination',type=Path,default=Path(__file__).parent/'models');p.add_argument('--portrait',action='store_true',help='Incluye HyperSwap 1C 256 (403 MB adicionales).');p.add_argument('--avatar',action='store_true',help='Incluye LivePortrait 512 y gestos (339 MB; 0.74 MB nuevos si ya tienes los cuatro modelos).');p.add_argument('--background',action='store_true',help='Descarga solo LaMa para relleno de fondo (208 MB).');args=p.parse_args()
     args.destination.mkdir(parents=True,exist_ok=True)
     items=json.loads((Path(__file__).parent/'models.json').read_text())
     print('LaMa ONNX · Apache 2.0. Consulta THIRD_PARTY_NOTICES.md.' if args.background and not args.avatar and not args.portrait else 'Pesos de terceros para investigación no comercial. Consulta IA-LOCAL.md y sus fuentes.',flush=True)

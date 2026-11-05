@@ -1,6 +1,6 @@
 # Another Face · Inicio en Windows
 
-**Entrega 1.12.0:** para actualizar, consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md). Avatar fotográfico anima una referencia frontal y dos perfiles en el navegador con `npm.cmd start`, sin Python ni túnel. Para generación opcional, `instalar-avatar-local.bat` añade LivePortrait 512 (338 MB); `mejorar-ia-local.bat` añade HyperSwap 1C 256 (403 MB). El relleno opcional LaMa se instala con `instalar-relleno-ia.bat` (208 MB). Conserva el entorno, los modelos anteriores y las claves.
+**Entrega 1.13.0:** para actualizar, consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md). Avatar fotográfico anima una referencia frontal y dos perfiles en el navegador con `npm.cmd start`, sin Python ni túnel. Para generación opcional, `instalar-avatar-local.bat` añade LivePortrait 512 y los ajustes de gestos (339 MB en total; 0,74 MB nuevos si ya tienes los cuatro modelos anteriores); `mejorar-ia-local.bat` añade HyperSwap 1C 256 (403 MB). El relleno opcional LaMa se instala con `instalar-relleno-ia.bat` (208 MB). Conserva el entorno, los modelos anteriores y las claves.
 
 **Para servir la página desde Render y utilizar la IA de tu PC**, sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Los pasos de esta página ejecutan web e IA juntas en la misma computadora.
 

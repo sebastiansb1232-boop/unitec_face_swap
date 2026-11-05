@@ -25,11 +25,14 @@
   }
   if(points.stamp!==undefined)out.stamp=points.stamp;return out;
  }
- function mapper(destination,camera){
-  const a=frame(destination),b=frame(camera),height=Math.max(a.height,.045),sourceHeight=Math.max(b.height,.045),midA=(a.top+a.bottom)/2,midB=(b.top+b.bottom)/2;
-  return p=>{const dx=(p.x-a.origin.x)/a.width,dy=(p.y-a.origin.y)/a.width,u=dx*a.x.x+dy*a.x.y,v=dx*a.y.x+dy*a.y.y,scaled=(v-midA)*sourceHeight/height+midB;
-   return {x:b.origin.x+b.width*(u*b.x.x+scaled*b.y.x),y:b.origin.y+b.width*(u*b.x.y+scaled*b.y.y)};
+ function interiorMapper(destination,camera){
+  const a=frame(destination),b=frame(camera),upper=f=>median([13,82,312].map(f.at)),lower=f=>median([14,87,317].map(f.at));
+  const aTop=upper(a),aBottom=lower(a),bTop=upper(b),bBottom=lower(b),midA=(aTop+aBottom)/2,midB=(bTop+bBottom)/2;
+  const heightA=Math.max(aBottom-aTop,.025),heightB=Math.max(bBottom-bTop,.015);
+  // Solo la cavidad: reducir el muestreo evita tomar el labio de la cámara.
+  return p=>{const dx=(p.x-a.origin.x)/a.width,dy=(p.y-a.origin.y)/a.width,u=(dx*a.x.x+dy*a.x.y)*.94,v=((dx*a.y.x+dy*a.y.y-midA)/heightA)*heightB*.88+midB;
+   return {x:b.origin.x+b.width*(u*b.x.x+v*b.y.x),y:b.origin.y+b.width*(u*b.x.y+v*b.y.y)};
   };
  }
- const api={frame,aperture,sanitize,mapper};root.MouthMotion=api;if(typeof module!=='undefined')module.exports=api;
+ const api={frame,aperture,sanitize,interiorMapper};root.MouthMotion=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

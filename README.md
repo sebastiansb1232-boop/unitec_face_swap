@@ -1,4 +1,4 @@
-> **Another Face 1.12.0 · Malla estable, boca natural y tono a elección.** Estabilización de pose, conservación del interior oral de cámara, color de piel configurable y fondo opcional con LaMa para retirar el contorno original. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render.
+> **Another Face 1.13.0 · Labios de referencia, tono dominante y fondo con memoria controlada.** La cámara asiste solo dientes y lengua. LivePortrait incorpora ajustes opcionales de ojos y labios; LaMa utiliza CPU en un proceso separado mientras el motor facial está descargado. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render.
 
 # Another Face
 
@@ -59,7 +59,7 @@ Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y vario
 
 Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`. Para el motor neuronal: `npm run start:ai`, después de la instalación descrita en IA-LOCAL.md.
 
-Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega pasa 95 pruebas JavaScript y 41 Python, incluidas las de tres vistas, giro, profundidad, boca, lengua, LaMa, clave privada y resultados atrasados. Las pruebas de navegador ejecutaron Avatar fotográfico y LivePortrait y LaMa reales en CPU, con captura y guardado simulado. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
+Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega pasa 99 pruebas JavaScript y 50 Python, incluidas las de tres vistas, giro, profundidad, boca, lengua, LaMa, clave privada y resultados atrasados. Las pruebas de navegador ejecutaron Avatar fotográfico, LivePortrait con sus redes de ajuste y LaMa aislado en CPU, con captura y guardado simulado. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
 
 Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
 - Permitir y denegar cámara; encender, apagar y cambiar cámara.

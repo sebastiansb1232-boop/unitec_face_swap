@@ -40,11 +40,11 @@ test('referencia y fotograma: conserva la carga útil y solo añade la credencia
 });
 test('el relleno de fondo conserva autenticación, informa disponibilidad y espera su resultado',async()=>{
   let backgroundCalls=0;const f=await fixture(async(url,options)=>{
-    if(url.endsWith('/healthz'))return response({ready:true,auth_required:true,background_available:true});
+    if(url.endsWith('/healthz'))return response({ready:true,auth_required:true,background_available:true,background_safe:true,gesture_retargeting:true});
     assert.equal(url,env.ANOTHERFACE_AI_URL+'/background');assert.equal(options.headers.Authorization,'Bearer '+TOKEN);assert.deepEqual(JSON.parse(options.body),input);backgroundCalls++;
     return response({image:'data:image/jpeg;base64,background',model:'lama_fp32',ms:500});
   });
-  try{const status=await (await fetch(f.base+'/status')).json();assert.equal(status.background_available,true);assert.ok(!JSON.stringify(status).includes(TOKEN));const r=await post(f.base+'/background');assert.equal(r.status,200);assert.equal((await r.json()).model,'lama_fp32');assert.equal(backgroundCalls,1);}finally{await f.close();}
+  try{const status=await (await fetch(f.base+'/status')).json();assert.equal(status.background_available,true);assert.equal(status.background_safe,true);assert.equal(status.gesture_retargeting,true);assert.ok(!JSON.stringify(status).includes(TOKEN));const r=await post(f.base+'/background');assert.equal(r.status,200);assert.equal((await r.json()).model,'lama_fp32');assert.equal(backgroundCalls,1);}finally{await f.close();}
 });
 test('el relleno ausente indica cómo instalarlo sin reenviar detalles del motor',async()=>{
   const f=await fixture(async url=>url.endsWith('/healthz')?healthy():response({detail:TOKEN},409));

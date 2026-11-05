@@ -20,7 +20,7 @@
     }
     start(){
       if(this.ready)return this.ready;
-      this.worker=new Worker('tracking-worker.js?v=15');
+      this.worker=new Worker('tracking-worker.js?v=16');
       this.worker.onmessage=event=>{
         const item=this.pending.get(event.data.id);if(!item)return;
         this.pending.delete(event.data.id);clearTimeout(item.timer);
