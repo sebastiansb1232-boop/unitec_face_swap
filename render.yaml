@@ -1,7 +1,7 @@
 # Render Blueprint: conservar el servicio y las variables al actualizarlo.
 services:
   - type: web
-    name: anotherface-unitec
+    name: another-face
     runtime: node
     buildCommand: npm ci
     startCommand: npm start
@@ -18,4 +18,8 @@ services:
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: ANOTHERFACE_AI_URL
+        sync: false
+      - key: ANOTHERFACE_AI_TOKEN
         sync: false

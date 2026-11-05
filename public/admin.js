@@ -1,6 +1,6 @@
 'use strict';
 const $=s=>document.querySelector(s);
-const names={ninguno:'Original',silueta:'Malla',perro:'Perrito',deform:'Deformar',remolino:'Remolino'};
+const names={ninguno:'Original',silueta:'Malla',perro:'Perrito',deform:'Deformar',remolino:'Remolino',retrato:'Retrato'};
 let page=0,revision=0,selected=null;
 const dates=value=>new Date(value).toLocaleString('es',{dateStyle:'medium',timeStyle:'short'});
 // Elimina el token fijo de versiones anteriores; nunca se usa para autenticar.

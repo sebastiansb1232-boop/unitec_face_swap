@@ -1,0 +1,25 @@
+# Render Blueprint: conservar el servicio y las variables al actualizarlo.
+services:
+  - type: web
+    name: another-face
+    runtime: node
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ANOTHERFACE_AI_URL
+        sync: false
+      - key: ANOTHERFACE_AI_TOKEN
+        sync: false

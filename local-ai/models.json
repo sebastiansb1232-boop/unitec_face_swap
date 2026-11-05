@@ -1,0 +1,14 @@
+[
+  {
+    "name": "inswapper_128_fp16.onnx",
+    "url": "https://huggingface.co/hacksider/deep-live-cam/resolve/581e70b61240b7928404c17900437f47cfe94133/inswapper_128_fp16.onnx?download=true",
+    "sha256": "6d51a9278a1f650cffefc18ba53f38bf2769bf4bbff89267822cf72945f8a38b",
+    "bytes": 277680638
+  },
+  {
+    "name": "arcface_w600k_r50.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/arcface_w600k_r50.onnx?download=true",
+    "sha256": "f1f79dc3b0b79a69f94799af1fffebff09fbd78fd96a275fd8f0cbbea23270d1",
+    "bytes": 174388474
+  }
+]

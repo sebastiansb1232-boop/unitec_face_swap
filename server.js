@@ -8,7 +8,7 @@ app.set('trust proxy', 1);
 const sessions = new Map(), limits = new Map();
 const TTL = 4 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const FILTERS = new Set(['ninguno', 'silueta', 'deform', 'remolino', 'perro']);
+const FILTERS = new Set(['ninguno', 'silueta', 'deform', 'remolino', 'perro', 'retrato']);
 function same(a, b) {
   return crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a || '')).digest(), crypto.createHash('sha256').update(String(b || '')).digest());
 }
@@ -39,6 +39,7 @@ app.use((req, res, next) => {
 });
 app.use('/api/captures', rate('capture', 20, 60000));
 app.use(express.json({ limit: '4mb' }));
+app.use('/api/neural',rate('neural',1200,60000),require('./neural-proxy').neuralRouter());
 function configured() {
   return !!(process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY));
 }
@@ -133,7 +134,7 @@ app.use((error, req, res, next) => {
   res.status(error.status || 500).json({ error: error.type === 'entity.too.large' ? 'La foto es demasiado grande.' : (error.status ? error.message : 'No se pudo completar la operación. Inténtalo de nuevo.') });
 });
 if (require.main === module) {
-  app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('Anotherface listo'));
+  app.listen(process.env.PORT || 3000, '0.0.0.0', () => console.log('Another Face listo'));
   setInterval(() => {
     const now = Date.now();
     for (const [key, expiry] of sessions) if (expiry < now) sessions.delete(key);

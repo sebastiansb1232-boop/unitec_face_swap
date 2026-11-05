@@ -1,0 +1,47 @@
+[
+  {
+    "path": "models/selfie_multiclass_256x256.tflite",
+    "bytes": 16371837,
+    "sha256": "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0"
+  },
+  {
+    "path": "vendor/face-mesh/face_mesh_solution_packed_assets.data",
+    "bytes": 3986256,
+    "sha256": "dbe5905c582c0462cdaea17e7e6ecea92edaa8cccc515c5e2e7291f2cbb5fb99"
+  },
+  {
+    "path": "vendor/face-mesh/face_mesh_solution_simd_wasm_bin.data",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "vendor/face-mesh/face_mesh_solution_simd_wasm_bin.wasm",
+    "bytes": 6161697,
+    "sha256": "fb9e9cfe8b83a914e40eab2efd3b0d92a61f82a7c968589f223ab2a7e331d314"
+  },
+  {
+    "path": "vendor/face-mesh/face_mesh_solution_wasm_bin.wasm",
+    "bytes": 6084312,
+    "sha256": "54522fa25c505bf094242f969b4e4919125eb0dadccb568f2af171bbd65865f9"
+  },
+  {
+    "path": "vendor/tasks-vision/wasm/vision_wasm_internal.js",
+    "bytes": 204284,
+    "sha256": "4a97e2520ba506c680ecd6ba6acfb146888afa0e2746d57f205352bc6ebb82eb"
+  },
+  {
+    "path": "vendor/tasks-vision/wasm/vision_wasm_internal.wasm",
+    "bytes": 9574032,
+    "sha256": "f00ec4731faa23b3e714d00e88d4d10e2df5c0a427d3a2b4ae6e3526fdd14ef7"
+  },
+  {
+    "path": "vendor/tasks-vision/wasm/vision_wasm_nosimd_internal.js",
+    "bytes": 204137,
+    "sha256": "927def7b465c51b86e4b3060f93646aca4e27121f4b8fc0483786e407ea9cf1f"
+  },
+  {
+    "path": "vendor/tasks-vision/wasm/vision_wasm_nosimd_internal.wasm",
+    "bytes": 9448638,
+    "sha256": "3821ea9b1f7fb8c549ef2a064ef5c85750bf375c545a49fd6eea0df44a95f1f4"
+  }
+]

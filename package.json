@@ -1,16 +1,23 @@
 {
-  "name": "anotherface-unitec",
-  "version": "1.0.0",
-  "description": "Demo educativa UNITEC — filtros IA con cámara y registro en Supabase",
+  "name": "another-face",
+  "version": "1.5.0",
+  "description": "Another Face — estudio de retrato con IA local o remota",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "start:ai": "node scripts/start-local-ai.js",
+    "setup:remote": "node scripts/setup-remote-ai.js",
+    "start:worker": "node scripts/start-ai-worker.js",
+    "check:worker": "node scripts/check-ai-worker.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

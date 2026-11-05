@@ -1,0 +1,9 @@
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+onnx==1.17.0
+fastapi==0.115.12
+uvicorn==0.34.2
+coloredlogs>=15,<16
+flatbuffers>=25,<26
+packaging>=24,<27
+sympy>=1.13,<1.15
