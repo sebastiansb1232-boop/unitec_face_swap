@@ -7,21 +7,32 @@ const SESSION_ID = crypto.randomUUID();
 let model = null, modelPromise = null, modelFailed = false;
 let stream = null, facing = 'user', generation = 0, busyCamera = false, sending = false;
 let currentFilter = 'retrato', points = null, rawPoints = null, lastFrame = 0, pendingPhoto = null, uploading = false;
-let comparing = false, analyzingReference=false, inference=null, handleResultsCallback=null, backgroundBusy=false;
-let portraitEngine='browser',cameraDevice='',resolutionLimit=0;
-let neuralView=null,trackingStarted=0,lastTrackStarted=0,lastMetricUpdate=0,trackerMs=0,neuralMessage='',neuralSample=null,lastSubmittedSample=null;
-const neuralMotion=new NeuralMotion(),neuralTracker=new NeuralTracker(),viewTimes=[],trackTimes=[];
-const neuralInput=document.createElement('canvas'),neuralFrame=document.createElement('canvas');
+let comparing = false, analyzingReference=false, inference=null, handleResultsCallback=null, backgroundBusy=false,capturePreparing=false;
+let portraitEngine='neural',cameraDevice='',resolutionLimit=0;
+let neuralView=null,trackingStarted=0,lastTrackStarted=0,lastTrackVideoTime=-1,lastMetricUpdate=0,lastNeuralDraw=0,trackerMs=0,neuralMessage='',neuralSample=null,lastSubmittedSample=null;
+const neuralMotion=new NeuralMotion(),neuralTracker=new NeuralTracker(),outputTracker=new NeuralTracker('image'),liveStabilizer=new FacePose.Stabilizer(),referenceViews=new ReferenceViews(),viewTimes=[],trackTimes=[];
+let outputTrackingBusy=false;
+const neuralInput=document.createElement('canvas');
+let neuralFrame=document.createElement('canvas'),neuralCapture=document.createElement('canvas');
 const referenceFace = new ReferenceFace(text => { const label=$('#reference-status'); if(label.textContent!==text) label.textContent=text; });
 const headTransfer=new HeadTransfer(text=>{const label=$('#hair-status');if(label.textContent!==text)label.textContent=text;});
 referenceFace.head=headTransfer;
-const neuralPortrait=new NeuralPortrait(text=>{neuralMessage=text;updateNeuralStatus();},()=>setTimeout(submitNeural,0));
+const neuralPortrait=new NeuralPortrait(text=>{neuralMessage=text;updateNeuralStatus();},()=>setTimeout(submitNeural,0),async(image,crop,sourcePoints)=>{
+  if(outputTrackingBusy||outputTracker.disabled)return null;
+  outputTrackingBusy=true;
+  try{
+    // La inferencia y el registro siempre usan la cámara sin espejo.
+    const result=await outputTracker.track(image,{refine:false});
+    return result?.landmarks?.map(p=>({x:p.x,y:p.y,z:p.z}));
+  }finally{outputTrackingBusy=false;}
+});
+neuralPortrait.photoOnly=true;headTransfer.suspended=true;neuralMessage='Avatar · Fotografías animadas con seguimiento en este dispositivo.';
 const dog = new Image(); dog.src = 'assets/dog_filter.png';
 const oval = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
 const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 let triangles = [], sendGeneration = 0;
 function setStatus(text) { $('#studio-status').textContent = text; }
-function clearTracking() { referenceFace.lost();neuralPortrait.reset(true);neuralMotion.reset();neuralView?.reset();neuralSample=null;lastSubmittedSample=null;viewTimes.length=0;trackTimes.length=0; points = null; rawPoints = null; lastFrame = 0; ctx.clearRect(0,0,overlay.width,overlay.height);updateNeuralStatus(); }
+function clearTracking() { referenceFace.lost();liveStabilizer.reset();neuralPortrait.reset(true);neuralMotion.reset();neuralView?.reset();neuralSample=null;lastSubmittedSample=null;lastTrackVideoTime=-1;viewTimes.length=0;trackTimes.length=0; points = null; rawPoints = null; lastFrame = 0; ctx.clearRect(0,0,overlay.width,overlay.height);updateNeuralStatus(); }
 function syncPresentation(){
   $('.video-wrap').classList.toggle('is-live',!!stream);
   $('.video-wrap').classList.toggle('native-camera',!!stream&&(currentFilter==='ninguno'||portraitEngine==='neural'&&currentFilter==='retrato'));
@@ -31,13 +42,14 @@ function syncPresentation(){
 function cameraControls(active) {
   $('#start-camera').classList.toggle('hidden', active);
   $('#capture-btn').classList.toggle('hidden', !active);
-  $('#capture-btn').disabled = !active || busyCamera || uploading || (currentFilter==='retrato' && comparing);
+  $('#capture-btn').disabled = !active || busyCamera || uploading || capturePreparing || (currentFilter==='retrato' && comparing);
   $('#reference-compare').disabled = !active || busyCamera;
   $('#switch-camera-btn').disabled = !active || busyCamera || analyzingReference || backgroundBusy;
   $('#stop-btn').disabled = !active || busyCamera;
   $('#start-camera').disabled = busyCamera;
   $('#camera-empty').classList.toggle('hidden', active);
   $('#reference-file').disabled=analyzingReference;
+  for(const side of ['left','right']){$('#reference-'+side).disabled=analyzingReference;$('#reference-'+side+'-remove').disabled=analyzingReference;}
   $('#reference-default').disabled=analyzingReference||!referenceFace.ready;
   $('#reference-background').disabled=!active||busyCamera||backgroundBusy||analyzingReference;
   $('#camera-device').disabled=busyCamera||analyzingReference;
@@ -61,11 +73,11 @@ async function getModel() {
       if (!points) {referenceFace.lost();neuralPortrait.reset(true);}
       if(portraitEngine==='neural'&&currentFilter==='retrato'){
         if(!points){neuralMotion.reset();neuralView?.reset();return;}
-        const now=performance.now(),stable=referenceFace.smoother.filter(points,referenceFace.stability,now);
+        const now=performance.now(),stable=liveStabilizer.filter(points,overlay.width,referenceFace.stability,now);
         trackerMs=now-trackingStarted;neuralMotion.update(stable,trackingStarted||now);
         if(!comparing&&!analyzingReference&&referenceFace.ready){
-          mirrorFrame(neuralFrame,results.image);
-          neuralSample={points:stable,raw:rawPoints,reference:referenceFace.choose(points),time:trackingStarted||now,generation};submitNeural();
+          if(!neuralPortrait.photoOnly)[neuralFrame,neuralCapture]=[neuralCapture,neuralFrame];
+          neuralSample={frame:neuralFrame,points:stable,raw:rawPoints,reference:referenceViews.reference||referenceFace.choose(points),time:trackingStarted||now,generation};submitNeural();
         }
       }else drawFrame(results.image);
     };
@@ -77,7 +89,7 @@ async function getModel() {
       const ids = [...new Set(edges.slice(i,i+3).flat())];
       if (ids.length===3) triangles.push(ids);
     }
-    try { await referenceFace.prepare(mesh, triangles); }
+    try { await referenceFace.prepare(mesh, triangles);referenceViews.setFront(referenceFace.choose());updateReferenceViews(); }
     catch (error) { $('#reference-status').textContent = error.message; }
     if(referenceFace.ready&&referenceFace.mode==='auto'&&$('#reference-preview'))$('#reference-preview').src=referenceFace.choose().image.src;
     mesh.onResults(handleResults);
@@ -89,7 +101,7 @@ async function getModel() {
   try { return await modelPromise; } catch (err) { modelPromise = null; throw err; }
 }
 function dimensions() {
-  const limit=Math.min(resolutionLimit||960,portraitEngine==='neural'?640:matchMedia('(max-width:760px)').matches?720:960);
+  const limit=Math.min(resolutionLimit||960,matchMedia('(max-width:760px)').matches?720:960);
   const scale = Math.min(1, limit/video.videoWidth);
   overlay.width = frame.width = Math.round(video.videoWidth*scale);
   overlay.height = frame.height = Math.round(video.videoHeight*scale);
@@ -115,7 +127,7 @@ async function openCamera(mode) {
   try {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('Abre esta página con HTTPS para utilizar la cámara.');
     const next = await navigator.mediaDevices.getUserMedia({
-      video: { width:{ideal:1280}, height:{ideal:720}, facingMode:{ideal:mode},...(cameraDevice?{deviceId:{exact:cameraDevice}}:{}) }, audio:false
+      video: { width:{ideal:1280}, height:{ideal:720}, frameRate:{ideal:30,max:60}, facingMode:{ideal:mode},...(cameraDevice?{deviceId:{exact:cameraDevice}}:{}) }, audio:false
     });
     stream = next; facing = mode; video.srcObject = next;
     await video.play();
@@ -179,22 +191,30 @@ async function tick(current) {
   if (video.readyState>=2 && !sending) {
     if(currentFilter!=='ninguno'&&model && !analyzingReference) {
       const liveNeural=portraitEngine==='neural'&&currentFilter==='retrato';
-      const trackInterval=neuralTracker.disabled?Math.max(80,Math.min(500,trackerMs*1.8)):$('#reference-profile').value==='fluid'?33:50;
+      if(liveNeural&&video.currentTime===lastTrackVideoTime){if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(()=>tick(current));else setTimeout(()=>tick(current),8);return;}
+      const trackInterval=neuralTracker.disabled?Math.max(33,Math.min(120,trackerMs)):16;
       if(liveNeural&&performance.now()-lastTrackStarted<trackInterval){setTimeout(()=>tick(current),8);return;}
       sending=true; sendGeneration=current;
       try {
         let source=video;
         if(liveNeural){
-          const w=Math.min($('#reference-profile').value==='fluid'?320:480,video.videoWidth),h=Math.round(video.videoHeight*w/video.videoWidth);
+          const w=Math.min($('#reference-profile').value==='fluid'?256:384,video.videoWidth),h=Math.round(video.videoHeight*w/video.videoWidth);
           if(neuralInput.width!==w||neuralInput.height!==h){neuralInput.width=w;neuralInput.height=h;}
-          neuralInput.getContext('2d').drawImage(video,0,0,w,h);source=neuralInput;trackingStarted=lastTrackStarted=performance.now();
+          if(neuralPortrait.photoOnly)neuralInput.getContext('2d').drawImage(video,0,0,w,h);
+          else{
+            if(neuralCapture.width!==overlay.width||neuralCapture.height!==overlay.height){neuralCapture.width=overlay.width;neuralCapture.height=overlay.height;}
+            neuralCapture.getContext('2d').drawImage(video,0,0,neuralCapture.width,neuralCapture.height);
+            neuralInput.getContext('2d').drawImage(neuralCapture,0,0,w,h);
+          }
+          source=neuralInput;trackingStarted=lastTrackStarted=performance.now();
+          lastTrackVideoTime=video.currentTime;
         }
         inference=(async()=>{
           if(liveNeural){
-            const result=await neuralTracker.track(source,{refine:$('#reference-profile').value!=='fluid'});
+            const result=await neuralTracker.track(source,{refine:false,timestamp:trackingStarted});
             if(result){handleResultsCallback({image:source,multiFaceLandmarks:result.landmarks?[result.landmarks]:[]});return;}
           }
-          model.setOptions({refineLandmarks:!(liveNeural&&$('#reference-profile').value==='fluid')});await model.send({image:source});
+          model.setOptions({refineLandmarks:!liveNeural});await model.send({image:source});
         })();await inference;
       }
       catch { clearTracking(); drawFrame(video); $('#face-status-overlay').textContent='Seguimiento no disponible'; }
@@ -202,6 +222,7 @@ async function tick(current) {
     } else if(currentFilter!=='ninguno'&&!analyzingReference)drawFrame(video);
   }
   if(current===generation && stream) {
+    if(portraitEngine==='neural'&&currentFilter==='retrato'&&model&&!analyzingReference){setTimeout(()=>tick(current),0);return;}
     // Inferir el siguiente fotograma disponible, sin añadir 33 ms al tiempo del modelo.
     if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(()=>tick(current));
     else setTimeout(()=>tick(current),16);
@@ -211,11 +232,11 @@ function mirrorFrame(canvas,source){
   const W=overlay.width,H=overlay.height;if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
   const c=canvas.getContext('2d');c.save();c.clearRect(0,0,W,H);if(facing==='user'){c.translate(W,0);c.scale(-1,1);}c.drawImage(source,0,0,W,H);c.restore();
 }
-function neuralSettings(){return {strength:referenceFace.opacity,mouth:referenceFace.mouth,eyes:referenceFace.eyes,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,color:(1-referenceFace.complexion)*.75,detail:Math.max(0,Math.min(.35,(referenceFace.detail-.6)*.55))};}
+function neuralSettings(){return {strength:referenceFace.opacity,identity_strength:Number($('#reference-identity').value)/100,mouth:referenceFace.mouth,eyes:referenceFace.eyes,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,color:(1-referenceFace.complexion)*.75,detail:Math.max(0,Math.min(.35,(referenceFace.detail-.6)*.55)),quality:$('#reference-quality').value};}
 function submitNeural(){
   const sample=neuralSample;
   if(!stream||comparing||analyzingReference||portraitEngine!=='neural'||currentFilter!=='retrato'||!sample||sample===lastSubmittedSample||sample.generation!==generation||performance.now()-sample.time>450)return;
-  if(neuralPortrait.submit(neuralFrame,sample.points,sample.reference,neuralSettings(),sample.raw))lastSubmittedSample=sample;
+  if(neuralPortrait.submit(sample.frame,sample.points,sample.reference,neuralSettings(),sample.raw,{mirror:facing==='user',capturedAt:sample.time}))lastSubmittedSample=sample;
 }
 function updateNeuralStatus(){
   const fps=viewTimes.length>1?(viewTimes.length-1)*1000/Math.max(viewTimes.at(-1)-viewTimes[0],1):0;
@@ -223,7 +244,7 @@ function updateNeuralStatus(){
   $('#neural-status').textContent=neuralMessage||'Modo ligero · Procesamiento en este dispositivo';
   const value=(id,n)=>{const e=$(id);if(e)e.textContent=n>0?n.toFixed(1):'—';};
   value('#fps-view',stream?fps:0);value('#fps-ai',stream&&activeNeural?neuralPortrait.fps:0);value('#fps-tracking',stream?tracked:0);
-  if($('#engine-label'))$('#engine-label').textContent=currentFilter==='ninguno'?'Original':activeNeural?({CUDAExecutionProvider:'GPU · CUDA',DmlExecutionProvider:'GPU · DirectML',CPUExecutionProvider:'CPU · ONNX'}[neuralPortrait.last?.provider||neuralPortrait.engineInfo?.provider]||'Motor neuronal'):'Modo ligero';
+  if($('#engine-label'))$('#engine-label').textContent=currentFilter==='ninguno'?'Original':activeNeural&&neuralPortrait.photoOnly?'Avatar · Fotos 3D':activeNeural?({CUDAExecutionProvider:'GPU · CUDA',DmlExecutionProvider:'GPU · DirectML',CPUExecutionProvider:'CPU · ONNX'}[neuralPortrait.last?.provider||neuralPortrait.engineInfo?.provider]||'Motor neuronal'):'Modo ligero';
 }
 function recordView(now){
   viewTimes.push(now);while(viewTimes.length>60||viewTimes.length>2&&now-viewTimes[0]>1200)viewTimes.shift();
@@ -232,7 +253,9 @@ function recordView(now){
 function liveView(current){
   if(current!==generation||!stream)return;
   if(video.readyState>=2&&!busyCamera&&(currentFilter==='ninguno'||portraitEngine==='neural'&&currentFilter==='retrato')){
-    if(currentFilter==='retrato'&&!comparing&&!analyzingReference)drawNeuralResult();else{referenceFace.rendered=false;neuralView?.hide();}
+    if(currentFilter==='retrato'&&!comparing&&!analyzingReference){
+      const now=performance.now();drawNeuralResult();lastNeuralDraw=now;
+    }else{referenceFace.rendered=false;neuralView?.hide();}
     recordView(performance.now());
   }
   if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(()=>liveView(current));else setTimeout(()=>liveView(current),33);
@@ -259,12 +282,13 @@ function drawFrame(source) {
   if(!(currentFilter==='ninguno'||portraitEngine==='neural'&&currentFilter==='retrato'))recordView(performance.now());
 }
 function drawNeuralResult(capture=false){
-  const result=neuralPortrait.last;
   const current=neuralMotion.predict(performance.now());
+  const result=neuralPortrait.select(current,overlay.width,performance.now(),referenceViews.reference||referenceFace.choose(current),overlay.height);
   if(!result||!current||result.width!==overlay.width||result.height!==overlay.height||!neuralView){referenceFace.rendered=false;neuralView?.hide();return;}
   const source=capture?frame:{width:overlay.width,height:overlay.height,video,mirror:facing==='user'};
-  referenceFace.rendered=neuralView.draw(capture?ctx:null,source,current,result,{opacity:referenceFace.opacity,eyes:referenceFace.eyes,mouth:referenceFace.mouth,softness:referenceFace.softness,light:$('#reference-light')?.checked===false?0:.5},performance.now());
-  $('#reference-status').textContent=referenceFace.rendered?'Retrato neuronal activo · Gestos en vivo':'Ajustando el retrato a tu posición…';
+  referenceFace.rendered=neuralView.draw(capture?ctx:null,source,current,result,{identityLock:true,shape:referenceFace.shape,opacity:referenceFace.opacity,eyes:referenceFace.eyes,mouth:referenceFace.mouth,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,light:$('#reference-light')?.checked===false?0:.35},performance.now());
+  const status=referenceFace.rendered?(result.referencePhoto?(neuralPortrait.photoOnly?'Avatar fotográfico activo · ':'Referencia en vivo mientras se valida la IA · ')+({front:'Frontal',left:'Perfil 1',right:'Perfil 2'}[result.activeView]||'Referencia')+' · Gestos en vivo':result.registered?'Retrato neuronal activo · Ajuste refinado y gestos en vivo':'Retrato neuronal activo · Gestos en vivo'):'Ajustando el retrato a tu posición…';
+  if($('#reference-status').textContent!==status)$('#reference-status').textContent=status;
 }
 function drawMesh() {
   ctx.strokeStyle='rgba(151,231,216,.35)';ctx.lineWidth=.65;
@@ -324,7 +348,23 @@ function drawWarp() {
   ctx.restore();
 }
 $('#capture-btn').addEventListener('click',async()=>{
-  if(!stream || busyCamera || uploading || !lastFrame || performance.now()-lastFrame>1500) return setStatus('Espera a que la cámara esté lista.');
+  if(!stream || busyCamera || uploading || capturePreparing) return setStatus('Espera a que la cámara esté lista.');
+  if(currentFilter==='retrato'&&portraitEngine==='neural'){
+    const started=performance.now(),cameraGeneration=generation,identityEpoch=neuralPortrait.epoch;
+    capturePreparing=true;cameraControls(true);
+    try{
+      // Un clic entre detecciones espera una muestra fresca; nunca guarda la
+      // cámara sin efecto ni espera a que termine otra generación neuronal.
+      for(;;){
+        if(!stream||generation!==cameraGeneration||neuralPortrait.epoch!==identityEpoch||currentFilter!=='retrato'||portraitEngine!=='neural'||comparing||analyzingReference)return setStatus('La captura se canceló al cambiar la cámara o el retrato.');
+        const now=performance.now();
+        if(video.readyState>=2&&model&&points&&neuralMotion.predict(now)){drawNeuralResult();if(referenceFace.rendered)break;}
+        if(now-started>=1500)return setStatus('Espera a que se recupere el seguimiento del rostro.');
+        await new Promise(resolve=>setTimeout(resolve,16));
+      }
+    }finally{capturePreparing=false;cameraControls(!!stream);}
+  }
+  if(!lastFrame || performance.now()-lastFrame>1500) return setStatus('Espera a que la cámara esté lista.');
   if(currentFilter!=='ninguno' && (!model || !points)) return setStatus('Para este filtro, coloca tu rostro de frente y espera a que se detecte.');
   if(currentFilter==='perro' && (!dog.complete || !dog.naturalWidth)) return setStatus('El filtro de perrito todavía no se ha cargado.');
   if(currentFilter==='retrato' && !referenceFace.rendered) return setStatus('Espera a que el retrato esté activo y termine la calibración.');
@@ -362,7 +402,8 @@ $('#retry-upload').addEventListener('click',uploadPhoto);
 
 $('#reference-shape').addEventListener('input',event=>{referenceFace.shape=Number(event.target.value)/100;$('#reference-shape-value').textContent=event.target.value+'%';referenceFace.rendered=false;});
 $('#reference-opacity').addEventListener('input',event=>{referenceFace.opacity=Number(event.target.value)/100;$('#reference-opacity-value').textContent=event.target.value+'%';referenceFace.rendered=false;});
-$('#reference-calibrate').addEventListener('click',()=>{referenceFace.reset();$('#reference-status').textContent='Mira de frente, abre los ojos y relaja la boca para calibrar.';});
+$('#reference-calibrate').addEventListener('click',()=>{referenceFace.reset();resetIdentity();$('#reference-status').textContent='Mira de frente, abre los ojos y relaja la boca para calibrar.';});
+$('#reference-identity').addEventListener('input',event=>{$('#reference-identity-value').textContent=event.target.value+'%';neuralPortrait.reset(true);neuralView?.reset();});
 
 for (const [control,property] of [['softness','softness'],['stability','stability'],['complexion','complexion'],['detail','detail'],['eyes','eyes'],['mouth','mouth'],['forehead','forehead'],['chin','chin']]) {
   $('#reference-'+control).addEventListener('input',event=>{
@@ -372,37 +413,45 @@ for (const [control,property] of [['softness','softness'],['stability','stabilit
   });
 }
 
-$('#reference-file').addEventListener('change',async event=>{
+function updateReferenceViews(){
+  for(const side of ['left','right']){
+    const view=referenceViews.entries.get(side),preview=$('#reference-'+side+'-preview');preview.hidden=!view;
+    if(view){preview.src=view.image.toDataURL('image/jpeg',.8);$('#reference-'+side+'-label').textContent='Cambiar foto';}else{preview.removeAttribute('src');$('#reference-'+side+'-label').textContent='Añadir foto';}
+    $('#reference-'+side+'-remove').classList.toggle('hidden',!view);
+  }
+  $('#reference-views-status').textContent=referenceViews.count+' vista'+(referenceViews.count===1?'':'s')+' · '+(referenceViews.count===3?'Identidad frontal y ambos perfiles preparados.':'Añade perfiles opuestos de la misma persona, entre 25 y 70 grados.');
+}
+function resetIdentity(){neuralPortrait.reset();neuralView?.reset();neuralMotion.reset();liveStabilizer.reset();neuralSample=null;lastSubmittedSample=null;}
+async function loadReference(event,side='front'){
   const file=event.target.files?.[0];if(!file||analyzingReference)return;
   if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setStatus('Elige una foto JPG, PNG o WebP.');event.target.value='';return;}
   if(file.size>12*1024*1024){setStatus('La foto debe ocupar como máximo 12 MB.');event.target.value='';return;}
-  analyzingReference=true;cameraControls(!!stream);setStatus('Analizando tu referencia en este dispositivo…');
-  neuralPortrait.reset();
-  neuralView?.reset();
-  let mesh;
+  analyzingReference=true;cameraControls(!!stream);setStatus('Analizando tu fotografía…');resetIdentity();let mesh;
   try{
     mesh=await getModel();if(inference)await inference;
-    const bitmap=await createImageBitmap(file),scale=Math.min(1,1280/Math.max(bitmap.width,bitmap.height));
-    const image=document.createElement('canvas');image.width=Math.round(bitmap.width*scale);image.height=Math.round(bitmap.height*scale);image.getContext('2d').drawImage(bitmap,0,0,image.width,image.height);bitmap.close();
-    let detected;
+    const bitmap=await createImageBitmap(file),scale=Math.min(1,1280/Math.max(bitmap.width,bitmap.height)),image=document.createElement('canvas');
+    image.width=Math.round(bitmap.width*scale);image.height=Math.round(bitmap.height*scale);image.getContext('2d').drawImage(bitmap,0,0,image.width,image.height);bitmap.close();let detected;
     mesh.onResults(r=>{if(r.multiFaceLandmarks?.length===1)detected=r.multiFaceLandmarks[0].map(p=>({...p}));});
     mesh.setOptions({maxNumFaces:2,refineLandmarks:true});await mesh.reset();await mesh.send({image});
-    if(!detected)throw new Error('Usa una foto frontal con una sola persona, ojos visibles y buena luz.');
-    referenceFace.setCustomReference(image,detected);$('#reference-name').textContent='Tu foto de referencia';
-    if($('#reference-preview'))$('#reference-preview').src=image.toDataURL('image/jpeg',.85);
-    setStatus('Referencia cargada. Activa Retrato y calibra mirando de frente.');
+    if(!detected)throw new Error('Usa una foto nítida con una sola persona y los ojos visibles.');
+    const candidate={image,points:detected.map(p=>({x:p.x*image.width,y:p.y*image.height,z:p.z}))};
+    const error=FacePose.validateView(candidate.points,image.width,side);if(error)throw new Error(error);
+    if(side==='front'){
+      const reference=referenceFace.setCustomReference(image,detected);referenceViews.setFront(reference);$('#reference-name').textContent='Tu identidad de referencia';$('#reference-preview').src=image.toDataURL('image/jpeg',.85);
+    }else referenceViews.add(side,candidate);
+    updateReferenceViews();setStatus('Referencia preparada. '+referenceViews.count+' vista'+(referenceViews.count===1?'':'s')+' para la identidad neuronal.');
   }catch(error){setStatus(error.message||'No se pudo abrir esta foto.');}
-  finally{
-    if(mesh){mesh.setOptions({maxNumFaces:1});try{await mesh.reset();}catch{}mesh.onResults(handleResultsCallback);}
-    analyzingReference=false;event.target.value='';cameraControls(!!stream);
-  }
-});
+  finally{if(mesh){mesh.setOptions({maxNumFaces:1});try{await mesh.reset();}catch{}mesh.onResults(handleResultsCallback);}analyzingReference=false;event.target.value='';cameraControls(!!stream);}
+}
+$('#reference-file').addEventListener('change',event=>loadReference(event,'front'));
+for(const side of ['left','right']){
+  $('#reference-'+side).addEventListener('change',event=>loadReference(event,side));
+  $('#reference-'+side+'-remove').addEventListener('click',()=>{if(analyzingReference)return;referenceViews.remove(side);resetIdentity();updateReferenceViews();});
+}
 $('#reference-default').addEventListener('click',()=>{
-  if(!referenceFace.ready||analyzingReference)return;
-  referenceFace.useDefault();$('#reference-name').textContent='Referencia incluida';$('#hair-status').textContent='El cabello se prepara al activar el retrato.';
-  neuralPortrait.reset();
-  neuralView?.reset();
-  if($('#reference-preview'))$('#reference-preview').src=referenceFace.choose()?.image.src||'assets/reference-face/portrait-2.png';
+  if(!referenceFace.ready||analyzingReference)return;referenceFace.useDefault();referenceViews.setFront(referenceFace.choose());updateReferenceViews();resetIdentity();
+  $('#reference-name').textContent='Referencia incluida';$('#hair-status').textContent='El cabello se prepara al activar el retrato.';
+  $('#reference-preview').src=referenceFace.choose()?.image.src||'assets/reference-face/portrait-2.png';
 });
 $('#reference-hair').addEventListener('change',event=>{
   headTransfer.mode=event.target.value;headTransfer.clearTracking();
@@ -443,28 +492,39 @@ $('#camera-device').addEventListener('change',event=>{cameraDevice=event.target.
 navigator.mediaDevices?.addEventListener?.('devicechange',refreshCameras);
 $('#reference-resolution').addEventListener('change',event=>{resolutionLimit=Number(event.target.value);if(stream){dimensions();clearTracking();}});
 $('#reference-engine').addEventListener('change',async event=>{
-  const wantsNeural=event.target.value==='neural';event.target.disabled=true;
+  const wantsNeural=event.target.value==='neural',wantsAvatar=event.target.value==='avatar',live=wantsNeural||wantsAvatar,previous=neuralPortrait.photoOnly?'avatar':portraitEngine==='neural'?'neural':'browser';event.target.disabled=true;
   try{
-    if(wantsNeural&&!(await neuralPortrait.available())){event.target.value='browser';$('#neural-status').textContent=neuralPortrait.engineInfo?.error||(neuralPortrait.engineInfo?.mode==='remote'?'El motor remoto no está disponible. Comprueba que la PC servidora y el túnel estén activos.':'El motor aún no está disponible. Inícialo con npm.cmd run start:ai o espera a que termine de cargar. La instalación inicial está en instalar-ia-local.bat.');return;}
-    portraitEngine=wantsNeural?'neural':'browser';neuralPortrait.enabled=wantsNeural;neuralPortrait.reset();
-    headTransfer.suspended=wantsNeural;headTransfer.clearTracking();
-    $('#reference-shape').disabled=wantsNeural;
-    if($('#reference-light'))$('#reference-light').disabled=!wantsNeural;
-    $('#local-processing-note').classList.toggle('hidden',!wantsNeural);
+    if(wantsNeural&&!(await neuralPortrait.available())){event.target.value=previous;neuralMessage=neuralPortrait.engineInfo?.error||'El motor de la PC no está disponible. Puedes continuar con Avatar en este dispositivo.';updateNeuralStatus();return;}
+    portraitEngine=live?'neural':'browser';neuralPortrait.photoOnly=wantsAvatar;neuralPortrait.enabled=wantsNeural;neuralPortrait.reset();
+    headTransfer.suspended=live;headTransfer.clearTracking();$('#reference-shape').disabled=false;$('#reference-identity').disabled=!wantsNeural;$('#reference-quality').disabled=!wantsNeural;
+    if(wantsNeural)configureNeuralQuality();else if(wantsAvatar){$('#reference-quality').value='balanced';$('#reference-quality').options[0].textContent='Fotos · Reproyección en vivo';}
+    if($('#reference-light'))$('#reference-light').disabled=!live;
+    $('#local-processing-note').classList.toggle('hidden',!live);
     const remote=neuralPortrait.engineInfo?.mode==='remote';
-    $('#local-processing-note').textContent=remote?'La referencia y los recortes faciales pasan por el servidor web y se procesan en la PC remota del proyecto. La cámara sigue en vivo entre resultados de IA.':'La referencia y el recorte facial se procesan en la computadora que sirve esta página. La cámara sigue en vivo entre resultados de IA.';
-    $('#video-processing-note').textContent=wantsNeural?(remote?'El modo neuronal envía la referencia y recortes faciales al servidor del proyecto y al motor remoto. Al tomar una foto, se guarda durante 4 horas.':'El modo neuronal envía fotogramas al motor de esta computadora para procesarlos. Al tomar una foto, se guarda durante 4 horas.'):'Al tomar una foto, se envía al administrador y queda disponible durante 4 horas. El video se procesa en este dispositivo.';
-    $('#head-settings').classList.toggle('hidden',wantsNeural);
-    neuralMessage=wantsNeural?(neuralPortrait.engineInfo?.acceleration_warning||'Motor listo. El primer fotograma puede tardar más.'):'Modo ligero · Procesamiento en este dispositivo';updateNeuralStatus();
+    $('#local-processing-note').textContent=wantsAvatar?'Avatar anima la fotografía frontal y los perfiles en este dispositivo. No envía la cámara al generador de la PC.':remote?'Las referencias y los recortes pasan por el servidor web y se generan en la PC del proyecto.':'Las referencias y los recortes se generan en la computadora que sirve esta página.';
+    $('#video-processing-note').textContent=wantsAvatar?'Avatar procesa la cámara y las referencias en este dispositivo. Al tomar una foto, se guarda durante 4 horas.':wantsNeural?(remote?'El modo neuronal envía las referencias y los recortes al servidor del proyecto y al motor remoto. Al tomar una foto, se guarda durante 4 horas.':'El modo neuronal utiliza el motor de esta computadora. Al tomar una foto, se guarda durante 4 horas.'):'Al tomar una foto se guarda durante 4 horas. El video se procesa en este dispositivo.';
+    $('#head-settings').classList.toggle('hidden',live);
+    neuralMessage=wantsAvatar?'Avatar · Fotos en vivo · Añade ambos perfiles para mejorar los giros.':wantsNeural?(neuralPortrait.engineInfo?.acceleration_warning||'Motor listo. La textura neuronal se actualiza cuando llega una generación nueva.'):'Modo ligero · Procesamiento en este dispositivo';updateNeuralStatus();
     if(stream){dimensions();clearTracking();}syncPresentation();
   }finally{event.target.disabled=false;}
 });
 $('#reference-profile').addEventListener('change',event=>{
-  const profiles={natural:{shape:.82,complexion:.62,softness:.65,stability:.72,detail:1,eyes:.35,mouth:.7,forehead:.75,chin:.12},likeness:{shape:.96,complexion:.86,softness:.6,stability:.65,detail:1,eyes:.15,mouth:.45,forehead:.5,chin:.08},fluid:{shape:.76,complexion:.55,softness:.7,stability:.8,detail:.95,eyes:.55,mouth:.85,forehead:.8,chin:.18}};
-  const profile=profiles[event.target.value];if(!profile)return;
+  const profiles={natural:{shape:.95,complexion:.72,softness:.35,stability:.55,detail:1,eyes:0,mouth:0,forehead:0,chin:0},likeness:{shape:1,complexion:.82,softness:.3,stability:.5,detail:1.05,eyes:0,mouth:0,forehead:0,chin:0},fluid:{shape:.85,complexion:.7,softness:.4,stability:.45,detail:.9,eyes:0,mouth:0,forehead:0,chin:0}};
+  const profile=profiles[event.target.value];if(!profile)return;$('#reference-identity').value=event.target.value==='likeness'?'90':event.target.value==='fluid'?'45':'65';$('#reference-identity-value').textContent=$('#reference-identity').value+'%';
+  $('#reference-quality').value='balanced';configureNeuralQuality();neuralPortrait.reset(true);neuralView?.reset();
   for(const [key,value]of Object.entries(profile)){referenceFace[key]=value;$('#reference-'+key).value=Math.round(value*100);$('#reference-'+key+'-value').textContent=Math.round(value*100)+'%';}
   resolutionLimit=event.target.value==='fluid'?480:0;$('#reference-resolution').value=String(resolutionLimit);
   headTransfer.mode=event.target.value==='fluid'?'off':'color';$('#reference-hair').value=headTransfer.mode;headTransfer.clearTracking();if(stream){dimensions();clearTracking();}
 });
-if($('#reference-light'))$('#reference-light').disabled=true;
+function configureNeuralQuality(){
+  const native=neuralPortrait.engineInfo?.native_size||128,select=$('#reference-quality'),avatar=neuralPortrait.engineInfo?.model==='live_portrait_512';
+  if(neuralPortrait.photoOnly){select.value='balanced';select.options[0].textContent='Fotos · Reproyección en vivo';select.options[1].disabled=true;return;}
+  select.options[1].disabled=avatar;
+  if(avatar){select.value='balanced';select.options[0].textContent='Avatar · Salida nativa de 512';neuralPortrait.faceSize=512;return;}
+  select.options[0].textContent=native===256?'256 nativo · 1 pasada':'Equilibrado · 1 pasada de 128';
+  select.options[1].textContent=native===256?'Más detalle · 4 pasadas de 256':'Más detalle · 4 pasadas de 128';
+  neuralPortrait.faceSize=select.value==='detail'?(native===256?640:480):(native===256?448:320);
+}
+if($('#reference-light'))$('#reference-light').disabled=false;$('#reference-identity').disabled=true;$('#head-settings').classList.add('hidden');$('#local-processing-note').classList.remove('hidden');$('#local-processing-note').textContent='Avatar anima tus fotos en este dispositivo. No necesita el motor de la PC ni el túnel.';configureNeuralQuality();
+$('#reference-quality').addEventListener('change',()=>{configureNeuralQuality();neuralPortrait.reset(true);neuralView?.reset();});
 cameraControls(false);

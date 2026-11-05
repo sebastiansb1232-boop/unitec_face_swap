@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import urllib.request
 
 def digest(path):
@@ -13,15 +14,19 @@ def digest(path):
     return h.hexdigest()
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--destination',type=Path,default=Path(__file__).parent/'models');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--destination',type=Path,default=Path(__file__).parent/'models');p.add_argument('--portrait',action='store_true',help='Incluye HyperSwap 1C 256 (403 MB adicionales).');p.add_argument('--avatar',action='store_true',help='Incluye LivePortrait 512 (338 MB adicionales).');args=p.parse_args()
     args.destination.mkdir(parents=True,exist_ok=True)
     items=json.loads((Path(__file__).parent/'models.json').read_text())
     print('Pesos de terceros para investigación no comercial. Consulta IA-LOCAL.md y sus fuentes.',flush=True)
     for item in items:
+        if item.get('optional') and not (args.avatar if item.get('group')=='avatar' else args.portrait):continue
         dest=args.destination/item['name']
         if dest.exists() and dest.stat().st_size==item['bytes'] and digest(dest)==item['sha256']:
             print(item['name']+': verificado',flush=True);continue
         temporary=dest.with_suffix('.part')
+        temporary.unlink(missing_ok=True)
+        if shutil.disk_usage(args.destination).free<item['bytes']+64*1024*1024:
+            raise RuntimeError('Falta espacio para '+item['name']+'. Libera al menos '+str(round((item['bytes']+64*1024*1024)/1_000_000))+' MB en esta unidad.')
         print('Descargando '+item['name']+' ('+str(round(item['bytes']/1_000_000))+' MB)…',flush=True)
         try:
             request=urllib.request.Request(item['url'],headers={'User-Agent':'Anotherface-research/1.2'})

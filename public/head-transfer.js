@@ -121,11 +121,11 @@
       this.client.segment(frame).then(data=>{
         if(epoch!==this.epoch)return;
         this.interval=clamp(data.elapsed*1.25,130,420);this.inferenceTime=data.elapsed;
-        const completed=performance.now(),anchor=basis(snapshot),previous=this.live&&completed-this.live.now<Math.max(800,data.elapsed*2)?this.live:null;
-        this.live={hair:stabilizeMask(maskCanvas(data,'hair',snapshot,w,h),previous,'hair',anchor,w,h),skin:stabilizeMask(maskCanvas(data,'skin',snapshot,w,h),previous,'skin',anchor,w,h),head:stabilizeMask(maskCanvas(data,'erase',snapshot,w,h),previous,'head',anchor,w,h),tone:data.tone&&previous?.tone?data.tone.map((v,i)=>mix(previous.tone[i],v,.65)):data.tone,faceTone:data.faceTone,basis:anchor,w,h,now:completed,capturedAt:now,yaw:FaceAppearance.normalize(snapshot)[1].x};
+        const completed=performance.now(),anchor=basis(snapshot),yaw=FaceAppearance.normalize(snapshot)[1].x,previous=this.live&&completed-this.live.capturedAt<650&&Math.abs(yaw-this.live.yaw)<.08?this.live:null;
+        this.live={hair:stabilizeMask(maskCanvas(data,'hair',snapshot,w,h),previous,'hair',anchor,w,h),head:this.mode==='style'?stabilizeMask(maskCanvas(data,'erase',snapshot,w,h),previous,'head',anchor,w,h):null,tone:data.tone&&previous?.tone?data.tone.map((v,i)=>mix(previous.tone[i],v,.65)):data.tone,basis:anchor,w,h,now:completed,capturedAt:now,yaw};
       }).catch(error=>{this.status(error.message);this.interval=5000;}).finally(()=>{this.busy=false;});
     }
-    canFullHead(ref,frame){return this.mode==='style'&&!!ref.head&&!!this.background&&this.background.width===frame.width&&this.background.height===frame.height&&!!this.live;}
+    canFullHead(ref,frame){return this.mode==='style'&&!!ref.head&&!!this.background&&this.background.width===frame.width&&this.background.height===frame.height&&!!this.live&&Math.abs(this.live.yaw-(ref.pose?.yaw||0))<.18;}
     drawMask(kind,points,w,h){
       const c=fit(this.mask,w,h);c.clearRect(0,0,w,h);c.save();c.setTransform(...affine(this.live.basis,basis(points)));c.drawImage(this.live[kind],0,0,this.live.w,this.live.h);c.restore();return this.mask;
     }
@@ -134,12 +134,8 @@
       if(this.mode==='off'||this.suspended)return false;
       if(this.reference!==ref){this.reference=ref;this.prepareReference(ref);}
       this.update(frame,points,now);
-      if(!this.live||now-this.live.now>Math.max(1600,(this.inferenceTime||0)*3)||Math.abs(FaceAppearance.normalize(points)[1].x-this.live.yaw)>.16)return false;
-      if(this.live.faceTone&&ref.colors){
-        this.hairRenderer??=new HairRenderer();const mask=this.drawMask('skin',points,frame.width,frame.height);
-        const mean=[0,1,2].map(c=>ref.colors.reduce((sum,s)=>sum+s.mean[c],0)/ref.colors.length),target=FaceAppearance.rgb(mean).map(v=>clamp(v,0,1));
-        ctx.drawImage(this.hairRenderer.draw(frame,mask,this.live.faceTone,target,(this.complexion??.92)*opacity),0,0);
-      }
+      if(!this.live||now-this.live.capturedAt>Math.min(800,Math.max(300,(this.inferenceTime||0)*1.8))||Math.abs(FaceAppearance.normalize(points)[1].x-this.live.yaw)>.11)return false;
+      // La piel pertenece a la malla del rostro. Otra máscara retrasada producía halos.
       if(this.canFullHead(ref,frame)){
         const mask=this.drawMask('head',points,frame.width,frame.height),work=fit(this.work,frame.width,frame.height);
         work.clearRect(0,0,frame.width,frame.height);work.globalCompositeOperation='source-over';work.drawImage(this.background,0,0);

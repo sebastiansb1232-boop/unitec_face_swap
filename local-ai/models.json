@@ -10,5 +10,46 @@
     "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/arcface_w600k_r50.onnx?download=true",
     "sha256": "f1f79dc3b0b79a69f94799af1fffebff09fbd78fd96a275fd8f0cbbea23270d1",
     "bytes": 174388474
+  },
+  {
+    "name": "hyperswap_1c_256.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.3.0/resolve/6271ab1c4619ceb2e534d65e0ec973f22a9aec38/hyperswap_1c_256.onnx?download=true",
+    "sha256": "5528c2d76fe9986c99d829278987ef9f3a630cb606db7628d02b57b330f406a5",
+    "bytes": 402742682,
+    "optional": true,
+    "license": "ResearchRAIL-MS",
+    "source": "https://github.com/facefusion/facefusion-labs/tree/master/hyperswap"
+  },
+  {
+    "name": "live_portrait_feature_extractor.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/live_portrait_feature_extractor.onnx?download=true",
+    "bytes": 3354251,
+    "sha256": "980d26afc9af6d1b6c946329df08b89a4a8582c9bb668d9475f5254e69434d15",
+    "optional": true,
+    "group": "avatar"
+  },
+  {
+    "name": "live_portrait_motion_extractor.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/live_portrait_motion_extractor.onnx?download=true",
+    "bytes": 112636642,
+    "sha256": "ef4a00ff50d5d864994eeecb226dc3b298e62afacec8fa4fc8b912835ec4b0ab",
+    "optional": true,
+    "group": "avatar"
+  },
+  {
+    "name": "live_portrait_generator.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/live_portrait_generator.onnx?download=true",
+    "bytes": 222263347,
+    "sha256": "db9274114fed504226c5921fc736b9558505e68682e7448631aea7b62cb3048a",
+    "optional": true,
+    "group": "avatar"
+  },
+  {
+    "name": "live_portrait_stitcher.onnx",
+    "url": "https://huggingface.co/facefusion/models-3.0.0/resolve/728b9659bd9691bf32cbf7f61af478d94b7ba81e/live_portrait_stitcher.onnx?download=true",
+    "bytes": 193259,
+    "sha256": "c6683427edf3e0c3a86e61b1dea1e6dad56c557f5e711fec93966cfb34fd5f87",
+    "optional": true,
+    "group": "avatar"
   }
 ]

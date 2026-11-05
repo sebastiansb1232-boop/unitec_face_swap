@@ -1,6 +1,8 @@
 # Another Face: página en Render e IA en tu PC
 
-Esta entrega 1.5.0 permite separar la página del motor neuronal. Render sirve la web y transmite las solicitudes al motor de tu PC mediante un túnel HTTPS. La PC ejecuta ArcFace e InSwapper con el proveedor disponible; el navegador conserva el seguimiento y la composición en vivo. Puedes abrir la web desde un celular con cámara y HTTPS.
+**Actualización 1.9.0:** consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para las tres fotografías, las proporciones con profundidad estimada y LivePortrait opcional. Actualiza el código de Render y de tu PC, conservando claves y modelos. El estado actual utiliza `render_protocol: 5`, `reference_views: 3` y `patch_output: true`. El modo Avatar fotográfico del navegador funciona sin worker ni túnel; esta guía corresponde a la opción Neuronal.
+
+La conexión introducida en 1.5.0 permite separar la página del motor neuronal. Render sirve la web y transmite las solicitudes al motor de tu PC mediante un túnel HTTPS. La PC ejecuta ArcFace y el modelo de intercambio instalado con el proveedor disponible; el navegador conserva el seguimiento y la composición en vivo. Puedes abrir la web desde un celular con cámara y HTTPS.
 
 **La PC que ejecuta la IA debe permanecer encendida, conectada y con las dos terminales abiertas.** Trasladar la web a Render no aumenta por sí solo los FPS. El resultado depende de la GPU real, sus controladores, la conexión de subida y la latencia entre el navegador, Render y tu PC. Si el motor muestra CPU, todavía no está utilizando una GPU para esa sesión.
 
@@ -46,7 +48,7 @@ Se genera una clave aleatoria en `.env.ai`. Si repites el comando, conserva la c
 npm.cmd run start:worker
 ```
 
-También puedes abrir `iniciar-worker-ia.bat`. Espera este mensaje:
+También puedes abrir `iniciar-worker-ia.bat`. Para el generador opcional LivePortrait, instala primero `instalar-avatar-local.bat` y utiliza `iniciar-avatar-ia.bat` en lugar de `start:worker`. No ejecutes dos motores a la vez. Espera este mensaje:
 
 ```text
 Motor protegido disponible en 127.0.0.1:8766 · proveedor
@@ -161,9 +163,9 @@ En un servicio gratuito de Render puede haber una espera de arranque tras un per
 
 ## Datos y validación de esta entrega
 
-En modo neuronal remoto, la referencia y los recortes faciales con sus puntos pasan del navegador a Render, por Cloudflare y al motor de tu PC. La clave viaja solo entre servidores; no se entrega al navegador. El motor no escribe las imágenes en disco. Conserva referencias calculadas en memoria, con caducidad tras 15 minutos sin uso y un máximo de ocho. El guardado de fotos en Supabase continúa siendo una acción explícita al pulsar Tomar foto.
+En modo neuronal remoto, la referencia y los recortes faciales con sus puntos pasan del navegador a Render, por Cloudflare y al motor de tu PC. La clave viaja solo entre servidores; no se entrega al navegador. El motor no escribe las imágenes en disco. Conserva referencias calculadas en memoria, con vencimiento tras 15 minutos sin uso y limpieza periódica: un máximo de ocho para HyperSwap/InSwapper o tres para LivePortrait, que también conserva volúmenes de apariencia de las fotografías en RAM. El guardado de fotos en Supabase continúa siendo una acción explícita al pulsar Tomar foto.
 
-Pasaron **40 pruebas de JavaScript y 13 de Python**. Se comprobó también la comunicación del proxy Node con la aplicación FastAPI real, autenticación, preparación de referencia y ruta de fotograma, utilizando un motor simulado y transporte local. No se ha realizado desde aquí un despliegue en tu cuenta de Render, una conexión pública a tu PC ni una medición de tu GPU. Los ensayos anteriores de los modelos y del renderizado están documentados en IA-LOCAL.md y RENDIMIENTO.md.
+En la validación de la conexión de la entrega 1.5.0 pasaron **40 pruebas de JavaScript y 13 de Python**. Se comprobó también la comunicación del proxy Node con la aplicación FastAPI real, autenticación, preparación de referencia y ruta de fotograma, utilizando un motor simulado y transporte local. No se ha realizado desde aquí un despliegue en tu cuenta de Render, una conexión pública a tu PC ni una medición de tu GPU. Los ensayos anteriores de los modelos y del renderizado están documentados en IA-LOCAL.md y RENDIMIENTO.md.
 
 Referencias oficiales consultadas para esta configuración:
 

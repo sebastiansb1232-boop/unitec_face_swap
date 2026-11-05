@@ -2,7 +2,7 @@
 (function(root){
   'use strict';
   class NeuralTracker{
-    constructor(){this.disabled=!(root.Worker&&root.OffscreenCanvas&&root.createImageBitmap);this.pending=new Map();this.id=0;this.worker=null;this.ready=null;}
+    constructor(role='live'){this.role=role;this.disabled=!(root.Worker&&root.OffscreenCanvas&&root.createImageBitmap);this.pending=new Map();this.id=0;this.worker=null;this.ready=null;}
     request(type,body={},transfer=[],timeout=20000){
       return new Promise((resolve,reject)=>{
         const id=++this.id,timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('El seguimiento tardó demasiado.'));},timeout);
@@ -20,22 +20,29 @@
     }
     start(){
       if(this.ready)return this.ready;
-      this.worker=new Worker('tracking-worker.js?v=7');
+      this.worker=new Worker('tracking-worker.js?v=12');
       this.worker.onmessage=event=>{
         const item=this.pending.get(event.data.id);if(!item)return;
         this.pending.delete(event.data.id);clearTimeout(item.timer);
         if(event.data.error)item.reject(new Error(event.data.error));else item.resolve(event.data);
       };
       this.worker.onerror=error=>this.fail(error);this.worker.onmessageerror=error=>this.fail(error);
-      this.ready=this.request('init',{},[],60000);return this.ready;
+      this.ready=this.request('init',{role:this.role,forceCPU:this.forceCPU===true},[],60000).then(info=>{this.backend=info.backend;return info;});return this.ready;
     }
     async track(source,options={}){
       if(this.disabled)return null;
       try{
         await this.start();const image=await createImageBitmap(source);
-        try{return await this.request('frame',{image,refine:options.refine!==false},[image]);}
+        try{return await this.request('frame',{image,refine:options.refine!==false,reset:options.reset===true,timestamp:options.timestamp??root.performance?.now?.()??Date.now()},[image]);}
         finally{image.close();}
-      }catch(error){this.fail(error);return null;}
+      }catch(error){
+        if(!this.forceCPU&&this.backend==='tasks-gpu'){
+          this.worker?.terminate();this.worker=null;this.ready=null;this.forceCPU=true;
+          for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(error);}this.pending.clear();
+          return this.track(source,options);
+        }
+        this.fail(error);return null;
+      }
     }
   }
   root.NeuralTracker=NeuralTracker;

@@ -1,7 +1,8 @@
-/* Retrato 5: composición por zonas, textura y gestos en vivo. */
+/* Transferencia fotográfica por malla, con anclaje de rasgos y borde interior. */
 (function (root) {
   'use strict';
   const Appearance=root.FaceAppearance||(typeof require==='function'?require('./face-appearance.js'):null);
+  const Quality=root.PortraitQuality||(typeof require==='function'?require('./portrait-quality.js'):null);
   const OVAL = [10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
   const EYES = [[33,160,158,133,153,144],[362,385,387,263,373,380]];
   const HOLES = [[33,246,161,160,159,158,157,173,133,155,154,153,145,144,163,7],
@@ -196,14 +197,14 @@
     }
   }
   const VERTEX=`
-    attribute vec2 pos; attribute vec2 uvA; attribute vec2 uvB; attribute vec2 uvLive;
+    attribute vec3 pos; attribute vec2 uvA; attribute vec2 uvB; attribute vec2 uvLive;
     attribute float edge; attribute float feature;
     varying vec2 texA; varying vec2 texB; varying vec2 cameraUV; varying vec2 outputUV;
     varying float border; varying float ownFeature;
-    void main(){gl_Position=vec4(pos,0.,1.);texA=uvA;texB=uvB;cameraUV=uvLive;outputUV=vec2((pos.x+1.)*.5,(1.-pos.y)*.5);border=edge;ownFeature=feature;}`;
+    void main(){gl_Position=vec4(pos,1.);texA=uvA;texB=uvB;cameraUV=uvLive;outputUV=vec2((pos.x+1.)*.5,(1.-pos.y)*.5);border=edge;ownFeature=feature;}`;
   const FRAGMENT=`
     precision mediump float;
-    uniform sampler2D photoA; uniform sampler2D photoB; uniform sampler2D camera; uniform sampler2D composite;
+    uniform sampler2D photoA; uniform sampler2D photoB; uniform sampler2D camera;
     uniform sampler2D lightA; uniform sampler2D lightB; uniform sampler2D lightLive;
     uniform vec4 rectA; uniform vec4 rectB; uniform vec4 rectLive;
     uniform vec3 fallbackA; uniform vec3 fallbackB; uniform vec3 fallbackLive;
@@ -217,15 +218,13 @@
     vec3 localColor(vec4 sample,vec3 fallback){return mix(fallback,toYUV(sample.rgb),step(.5,sample.a));}
     vec3 relight(vec3 color,vec3 lowSource,vec3 lowTarget,vec3 referenceMean,vec3 native){
       vec3 source=toYUV(color);float detail=source.x-lowSource.x;
-      // El tono pertenece a la referencia; las variaciones de luz pertenecen a la escena.
-      float scene=clamp(lowTarget.x/max(fallbackLive.x,.035),.4,1.65);
-      float targetY=mix(lowTarget.x,mix(referenceMean.x,fallbackLive.x,.3)*mix(1.,scene,.85),material.x*.55);
-      // Retener también parte del volumen y de los detalles originales; nunca difuminar la piel final.
-      float structure=(lowSource.x-referenceMean.x)*.24;
-      float gain=clamp(targetY/max(lowSource.x,.035),.45,1.8);
-      float micro=(toYUV(native).x-lowTarget.x)*.09;
-      vec2 chroma=mix(lowTarget.yz,lowSource.yz,material.x)+(source.yz-lowSource.yz)*.85;
-      vec3 result=vec3(targetY+structure+detail*gain*material.y+micro,chroma);
+      // Una sola iluminación: no volver a sumar las sombras amplias de la foto.
+      float scene=clamp(lowTarget.x/max(fallbackLive.x,.035),.55,1.5);
+      float targetY=mix(lowTarget.x,referenceMean.x*scene,material.x*.28);
+      float gain=clamp(targetY/max(lowSource.x,.045),.7,1.4);
+      vec2 chroma=mix(lowTarget.yz,referenceMean.yz,material.x*.78)+clamp(source.yz-lowSource.yz,vec2(-.06),vec2(.06))*.7;
+      float volume=clamp(lowSource.x-referenceMean.x,-.10,.10)*.28;
+      vec3 result=vec3(targetY+volume+detail*gain*material.y,chroma);
       return mix(clamp(toRGB(result),0.,1.),color,completeHead*.6);
     }
     vec3 tintIris(vec3 color,vec4 eye,vec3 tone){
@@ -244,18 +243,15 @@
       vec3 b=localColor(texture2D(lightB,(texB-rectB.xy)/rectB.zw),fallbackB);
       vec3 ca=relight(texture2D(photoA,texA).rgb,a,base,fallbackA,native);
       vec3 cb=relight(texture2D(photoB,texB).rgb,b,base,fallbackB,native);
-      // Anclar la unión al fotograma actual, también con cambios bruscos de exposición.
-      float seam=smoothstep(.006,settings.w,border);seam=mix(seam,sqrt(seam),completeHead);
-      vec3 under=texture2D(composite,outputUV).rgb;
       vec3 face=mix(mix(ca,cb,settings.y),native,ownFeature);
-      vec3 color=mix(under,face,seam);
-      float alpha=smoothstep(0.,.038,border)*settings.x;
-      gl_FragColor=vec4(color*alpha,alpha);
+      // El borde se suaviza una vez, hacia dentro de la silueta.
+      float alpha=smoothstep(.001,settings.w,border)*settings.x;
+      gl_FragColor=vec4(face*alpha,alpha);
     }`;
   class MeshRenderer {
     constructor(triangles) {
       this.canvas=document.createElement('canvas');
-      const gl=this.gl=this.canvas.getContext('webgl',{alpha:true,premultipliedAlpha:true,antialias:true});
+      const gl=this.gl=this.canvas.getContext('webgl',{alpha:true,premultipliedAlpha:true,antialias:true,depth:true});
       if(!gl)throw new Error('Este dispositivo no permite el filtro de retrato (WebGL).');
       this.lost=false;this.canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();this.lost=true;});
       const shader=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);
@@ -263,21 +259,19 @@
       const program=this.program=gl.createProgram();gl.attachShader(program,shader(gl.VERTEX_SHADER,VERTEX));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,FRAGMENT));gl.linkProgram(program);
       if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('No se pudo enlazar el filtro gráfico.');
       gl.useProgram(program);this.buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
-      [['pos',2,0],['uvA',2,8],['uvB',2,16],['uvLive',2,24],['edge',1,32],['feature',1,36]].forEach(([name,size,offset])=>{
-        const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,40,offset);
+      [['pos',3,0],['uvA',2,12],['uvB',2,20],['uvLive',2,28],['edge',1,36],['feature',1,40]].forEach(([name,size,offset])=>{
+        const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,44,offset);
       });
       this.u=Object.fromEntries(['rectA','rectB','rectLive','fallbackA','fallbackB','fallbackLive','settings','onlyLive','material','completeHead','irisLeft','irisRight','irisToneLeft','irisToneRight'].map(n=>[n,gl.getUniformLocation(program,n)]));
-      ['photoA','photoB','camera','lightA','lightB','lightLive','composite'].forEach((n,i)=>gl.uniform1i(gl.getUniformLocation(program,n),i));
+      ['photoA','photoB','camera','lightA','lightB','lightLive'].forEach((n,i)=>gl.uniform1i(gl.getUniformLocation(program,n),i));
       gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
-      this.textures=new Map();this.videoTexture=this.texture();this.lightTexture=this.texture();this.compositeTexture=this.texture();this.liveLight=new LightField();this.triangles=triangles;this.adjacency=topology(triangles);
-      const eyes=ringDistance(this.adjacency,[...HOLES[0],...HOLES[1]]),lips=ringDistance(this.adjacency,HOLES[2]);
-      this.native=eyes.map(()=>0);
-      const forehead=ringDistance(this.adjacency,[10,109,338]),chin=ringDistance(this.adjacency,[152,148,377]);
-      this.regions=eyes.map((d,i)=>[1-smooth(d/3.5),1-smooth(lips[i]/3.2),1-smooth(forehead[i]/8),1-smooth(chin[i]/5)]);
-      this.vertices=new Float32Array(triangles.length*30);
+      gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
+      this.textures=new Map();this.videoTexture=this.texture();this.lightTexture=this.texture();this.liveLight=new LightField();this.triangles=triangles;this.adjacency=topology(triangles);
+      this.native=Array(468).fill(0);this.regions=Quality.featureRegions(this.adjacency);
+      this.vertices=new Float32Array(triangles.length*33);
       this.holeTriangles=[];
       HOLES.forEach((ids,k)=>ids.forEach((id,j)=>this.holeTriangles.push([468+k,id,ids[(j+1)%ids.length]])));
-      this.holeVertices=new Float32Array(this.holeTriangles.length*30);
+      this.holeVertices=new Float32Array(this.holeTriangles.length*33);
     }
     texture(){const gl=this.gl,t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t;}
     bindReference(ref,unit,lightUnit){
@@ -297,26 +291,26 @@
       for(const t of triangles)for(const i of t){
         const p=dst[i],sa=a.points[i]||live[i],sb=b.points[i]||live[i];
         data[k++]=p.x/W*2-1;data[k++]=1-p.y/H*2;
+        data[k++]=clamp((live[i]?.z||0)*2-(onlyLive ? .0002 : 0),-.95,.95);
         data[k++]=sa.x/a.image.width;data[k++]=sa.y/a.image.height;data[k++]=sb.x/b.image.width;data[k++]=sb.y/b.image.height;
         data[k++]=live[i].x/W;data[k++]=live[i].y/H;
         data[k++]=onlyLive?1:edges[i];data[k++]=onlyLive?1:this.native[i];
       }
-      gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);gl.uniform1f(this.u.onlyLive,onlyLive?1:0);gl.drawArrays(gl.TRIANGLES,0,data.length/10);
+      gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);gl.uniform1f(this.u.onlyLive,onlyLive?1:0);gl.drawArrays(gl.TRIANGLES,0,data.length/11);
     }
     draw(a,b,blend,live,dst,frame,colors,settings) {
       if(this.lost)throw new Error('Se perdió el contexto gráfico. Recarga para reactivar el retrato.');
       const gl=this.gl;
       if(this.canvas.width!==frame.width||this.canvas.height!==frame.height){this.canvas.width=frame.width;this.canvas.height=frame.height;}
-      gl.viewport(0,0,frame.width,frame.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.viewport(0,0,frame.width,frame.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       this.bindReference(a,0,3);this.bindReference(b,1,4);
       gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,this.videoTexture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,frame);
       this.liveLight.update(frame,live);
       gl.activeTexture(gl.TEXTURE5);gl.bindTexture(gl.TEXTURE_2D,this.lightTexture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,this.liveLight.canvas);
-      gl.activeTexture(gl.TEXTURE6);gl.bindTexture(gl.TEXTURE_2D,this.compositeTexture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,settings.composite||frame);
       const mean=stats=>[0,1,2].map(c=>stats.reduce((sum,s)=>sum+s.mean[c],0)/stats.length);
       gl.uniform3fv(this.u.fallbackA,mean(a.colors));gl.uniform3fv(this.u.fallbackB,mean(b.colors));gl.uniform3fv(this.u.fallbackLive,mean(colors));
       gl.uniform4fv(this.u.rectA,a.light.rect);gl.uniform4fv(this.u.rectB,b.light.rect);gl.uniform4fv(this.u.rectLive,this.liveLight.rect);
-      gl.uniform4f(this.u.settings,settings.opacity,blend,settings.tone,.06+settings.softness*.12);
+      gl.uniform4f(this.u.settings,settings.opacity,blend,settings.tone,.012+settings.softness*.035);
       gl.uniform3f(this.u.material,settings.complexion??.92,settings.detail??1,0);
       gl.uniform1f(this.u.completeHead,settings.fullHead?1:0);
       [468,473].forEach((id,k)=>{
@@ -325,18 +319,17 @@
         gl.uniform3fv(this.u[k?'irisToneRight':'irisToneLeft'],a.irises?.[k]||[.16,.12,.09]);
       });
       const edges=edgeDistances(live);
-      const blink=Math.max(...[[33,133,159,145],[263,362,386,374]].map(([a,b,t,d])=>clamp((.18-dist(live[t],live[d])/Math.max(dist(live[a],live[b]),1))/.1,0,1)));
-      const eyeStrength=Math.max(settings.eyes??.35,blink*.95);
-      this.native=this.regions.map(r=>Math.max(r[0]*eyeStrength,r[1]*(settings.mouth??.7),r[2]*(settings.forehead??.75),r[3]*(settings.chin??.12)));
+      const amounts=Quality.featureAmounts(live,settings);
+      this.native=this.regions.map(r=>Math.max(...r.map((weight,k)=>weight*amounts[k])));
       this.batch(a,b,live,dst,edges,frame,this.triangles,this.vertices,false);
       const source=live.slice(),destination=dst.slice();
-      for(const ids of HOLES){const center=arr=>ids.reduce((s,i)=>({x:s.x+arr[i].x/ids.length,y:s.y+arr[i].y/ids.length}),{x:0,y:0});source.push(center(live));destination.push(center(dst));}
+      for(const ids of HOLES){const center=arr=>ids.reduce((s,i)=>({x:s.x+arr[i].x/ids.length,y:s.y+arr[i].y/ids.length,z:s.z+(arr[i].z||0)/ids.length}),{x:0,y:0,z:0});source.push(center(live));destination.push(center(dst));}
       this.batch(a,b,source,destination,edges,frame,this.holeTriangles,this.holeVertices,true);
       return this.canvas;
     }
   }
   class ReferenceFace {
-    constructor(status){this.status=status;this.references=[];this.ready=false;this.shape=.82;this.opacity=1;this.tone=1;this.complexion=.62;this.detail=1;this.softness=.65;this.stability=.72;this.eyes=.35;this.mouth=.7;this.forehead=.75;this.chin=.12;this.mode='auto';this.smoother=new Appearance.ExpressionSmoother();this.reset();}
+    constructor(status){this.status=status;this.references=[];this.ready=false;this.shape=.95;this.opacity=1;this.tone=1;this.complexion=.7;this.detail=.95;this.softness=.45;this.stability=.55;this.eyes=0;this.mouth=0;this.forehead=0;this.chin=0;this.mode='auto';this.smoother=new Appearance.ExpressionSmoother();this.reset();}
     reset(){this.neutral=null;this.samples=[];this.lastNormalized=null;this.lastReference=null;this.rendered=false;this.currentReference=null;this.transition=null;this.colors=null;this.lastToneTime=null;this.visibility=0;this.lastDraw=null;this.smoother.reset();}
     lost(){this.rendered=false;this.samples=[];this.lastNormalized=null;this.colors=null;this.lastToneTime=null;this.visibility=0;this.lastDraw=null;this.smoother.reset();this.head?.clearTracking();if(this.ready)this.status('Coloca tu rostro frente a la cámara para activar el retrato.');}
     async prepare(mesh,triangles) {
@@ -347,7 +340,7 @@
           const image=new Image();image.src='assets/reference-face/portrait-'+(index+1)+'.png';
           try {
             await image.decode();await mesh.reset();detected=null;await mesh.send({image});if(!detected)continue;
-            const points=detected.map(p=>({x:p.x*image.naturalWidth,y:p.y*image.naturalHeight})),colors=this.sampler.sample(image,points);
+            const points=detected.map(p=>({x:p.x*image.naturalWidth,y:p.y*image.naturalHeight,z:p.z})),colors=this.sampler.sample(image,points);
             if(colors){references.push({image,points,normalized:normalize(points.slice(0,468)),pose:pose(points),colors,index,irises:this.sampler.irises(image,points)});break;}
           }catch(error){console.warn('Referencia no disponible:',index+1,error.message);}
         }
@@ -358,7 +351,7 @@
     }
     setCustomReference(image,landmarks){
       if(!landmarks||landmarks.length<468)throw new Error('No se encontró un rostro completo. Prueba una foto frontal y bien iluminada.');
-      const points=landmarks.map(p=>({x:p.x*image.width,y:p.y*image.height})),colors=this.sampler.sample(image,points);
+      const points=landmarks.map(p=>({x:p.x*image.width,y:p.y*image.height,z:p.z})),colors=this.sampler.sample(image,points);
       if(!colors)throw new Error('No se pudo analizar el color de esta foto.');
       this.renderer??=new MeshRenderer(this.triangles);this.renderer.releaseCustomReferences();
       const ref={image,points,normalized:normalize(points.slice(0,468)),pose:pose(points),colors,index:4,custom:true,irises:this.sampler.irises(image,points)};
@@ -397,9 +390,9 @@
         this.lastNormalized=n;this.samples.push(n);this.status('Mantén la expresión neutral… '+Math.round(this.samples.length/12*100)+'%');
         if(this.samples.length<12)return;this.neutral=average(this.samples);this.samples=[];
       }
-      const yaw=Math.abs(pose(live).yaw),desiredOpacity=smooth((.4-yaw)/.14),dt=clamp(now-(this.lastDraw??now-33),0,200);
+      const yaw=Math.abs(pose(live).yaw),desiredOpacity=smooth((.65-yaw)/.18),dt=clamp(now-(this.lastDraw??now-33),0,200);
       this.lastDraw=now;this.visibility=mix(this.visibility,desiredOpacity,1-Math.exp(-dt/95));
-      if(yaw>.45||this.visibility<.01){this.visibility=0;this.status('Vuelve un poco hacia la cámara: las fotos disponibles son frontales.');return;}
+      if(yaw>.72||this.visibility<.01){this.visibility=0;this.status('Vuelve un poco hacia la cámara: las fotos disponibles son frontales.');return;}
       const stable=this.smoother.filter(live,this.stability,now);
       try {
         this.updateColors(frame,live,now);if(!this.colors)return;
@@ -408,10 +401,11 @@
         if(this.head)this.head.complexion=this.complexion;
         try{fullHead=this.head?.drawBefore(ctx,frame,stable,ref,this.opacity*this.visibility,now)||false;}catch(error){this.head?.status(error.message);}
         let dst=Appearance.transfer(stable,this.neutral,ref.normalized,this.shape,{oval:OVAL,fullHead});
+        dst=Quality.anchorGeometry(live,dst,this.renderer.adjacency,fullHead);
         dst=protectTriangles(live,dst,this.renderer.triangles);
         ctx.drawImage(this.renderer.draw(r.a,r.b,r.blend,live,dst,frame,this.colors,{opacity:this.opacity*this.visibility,tone:this.tone,softness:this.softness,complexion:this.complexion,detail:this.detail,allPoints,fullHead,composite:ctx.canvas,eyes:this.eyes,mouth:this.mouth,forehead:this.forehead,chin:this.chin}),0,0);
-        this.rendered=this.visibility>.5 && yaw<.35;
-        this.status(yaw>.3?'Gira un poco hacia la cámara para mejorar el ajuste.':'Retrato 5 activo · Textura y composición por zonas');
+        this.rendered=this.visibility>.5 && yaw<.58;
+        this.status(yaw>.48?'Gira un poco hacia la cámara para mejorar el ajuste.':'Retrato activo · Ojos anclados y bordes limpios');
       }catch(error){this.ready=false;this.status(error.message);}
     }
   }

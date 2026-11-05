@@ -9,7 +9,7 @@ function startWorker(){
   const python=process.env.ANOTHERFACE_PYTHON||path.join(root,'.venv-ai',process.platform==='win32'?'Scripts/python.exe':'bin/python');
   if(!fs.existsSync(python))throw new Error('Falta el entorno de IA. Ejecuta instalar-ia-local.bat en esta PC.');
   const models=process.env.ANOTHERFACE_MODELS||path.join(root,'local-ai/models'),manifest=JSON.parse(fs.readFileSync(path.join(root,'local-ai/models.json')));
-  if(manifest.some(item=>{try{return fs.statSync(path.join(models,item.name)).size!==item.bytes;}catch{return true;}}))throw new Error('Faltan modelos completos. Libera espacio y ejecuta .venv-ai\\Scripts\\python.exe local-ai\\download_models.py.');
+  if(manifest.filter(item=>!item.optional).some(item=>{try{return fs.statSync(path.join(models,item.name)).size!==item.bytes;}catch{return true;}}))throw new Error('Faltan modelos completos. Libera espacio y ejecuta .venv-ai\\Scripts\\python.exe local-ai\\download_models.py.');
   const env={...process.env,ANOTHERFACE_AI_TOKEN:settings.ANOTHERFACE_AI_TOKEN,ANOTHERFACE_REQUIRE_AUTH:'1'};
   const child=spawn(python,['-u',path.join(root,'local-ai/service.py')],{cwd:root,env,stdio:'inherit',shell:false});
   let stopping=false,polling=false,reported=false,attempts=0;

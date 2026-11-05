@@ -1,4 +1,21 @@
-# Another Face · Retrato 7
+# Rendimiento actual · Another Face 1.9.0
+
+Avatar fotográfico procesa la referencia frontal y dos perfiles con seguimiento local y WebGL. Neuronal usa el motor instalado en la PC. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para instalar LivePortrait 512 y conocer los cambios de forma, sombras, ojos y captura.
+
+La cámara solicita 30 FPS, hasta 60 cuando es posible. Se eliminaron los límites anteriores de 20 detecciones/s y 8 composiciones/s. El seguimiento trabaja con entrada de 384 píxeles (256 en Fluido), sin esperar un fotograma adicional al terminar. La vista se adapta hasta 960 píxeles, 720 en móvil. Las texturas se reutilizan y la generación devuelve un recorte alineado; registrar su malla ya no bloquea otra generación. El modo fotográfico evita copiar la cámara completa para el generador.
+
+Los contadores siguen separados: Vista = composiciones, Seguimiento = detecciones nuevas e IA = resultados nuevos recibidos del motor. Avatar fotográfico no incrementa IA. Reproyectar una textura no crea un fotograma neuronal nuevo.
+
+En varias pruebas de la página completa con cámara simulada, CPU y Chromium con gráficos por software, Avatar fotográfico mostró entre 19–28 FPS de vista y 8–11 de seguimiento, sin errores de WebGL y con cero llamadas al generador. LivePortrait produjo una muestra de 512 en unos 15,8 segundos con CPU; ese entorno no alcanza 30 generaciones/s. No son mediciones de tu GPU ni pruebas comparativas de las mismas cargas.
+
+Para medir tu instalación, detén el worker y ejecuta `medir-ia-local.bat`, o `medir-ia-local.bat --avatar` para LivePortrait. El medidor descarta el calentamiento y utiliza tensores sintéticos. Mide solo el generador: excluye extracción de movimiento, seguimiento, compresión, red y dibujo. El presupuesto de 30 generaciones/s es aproximadamente 33,3 ms para todo el trabajo necesario, no solo el modelo.
+
+DirectML y CUDA conservan selección explícita y alternativa CPU. El arranque ejecuta una inferencia real antes de anunciar disponibilidad; el nombre del proveedor no asegura que cada operación corra en GPU. No se han medido proveedores GPU físicos en este entorno. Más hilos, más pasadas o un modelo mayor no garantizan más FPS.
+
+# Historial: Retrato 7 (anterior a 1.8)
+
+Los tamaños, límites y mediciones siguientes corresponden a la entrega antigua, principalmente InSwapper. No describen el rendimiento actual ni deben extrapolarse a LivePortrait o a tu PC.
+
 
 ## Cambios
 

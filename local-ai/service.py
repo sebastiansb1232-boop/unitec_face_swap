@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import os
 import time
 from pathlib import Path
+from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from api_auth import APIAuth, APIAuthMiddleware
@@ -34,23 +35,34 @@ class ImageInput(BaseModel):
     image: str = Field(max_length=5_400_000)
     points: list[list[float]] = Field(min_length=468,max_length=478)
 
+class ReferenceView(ImageInput):
+    side: Literal['left','right']
+
+class ReferenceInput(ImageInput):
+    views: list[ReferenceView] = Field(default_factory=list,max_length=2)
+
 class Settings(BaseModel):
     strength: float = Field(default=1,ge=0,le=1)
-    mouth: float = Field(default=.7,ge=0,le=1)
-    eyes: float = Field(default=.35,ge=0,le=1)
+    mouth: float = Field(default=.22,ge=0,le=1)
+    eyes: float = Field(default=.08,ge=0,le=1)
     color: float = Field(default=.45,ge=0,le=1)
     detail: float = Field(default=.15,ge=0,le=.35)
-    forehead: float = Field(default=.75,ge=0,le=1)
-    chin: float = Field(default=.12,ge=0,le=1)
-    softness: float = Field(default=.65,ge=0,le=1)
+    forehead: float = Field(default=.04,ge=0,le=1)
+    chin: float = Field(default=.01,ge=0,le=1)
+    softness: float = Field(default=.45,ge=0,le=1)
+    quality: Literal['balanced','detail'] = 'balanced'
+    transport: Literal['patch','legacy'] = 'legacy'
+    identity_strength: float = Field(default=0,ge=0,le=1)
+    driver_id: int = Field(default=0,ge=0,le=2147483647)
 
 class FrameInput(ImageInput):
+    client_protocol: int = Field(default=0,ge=0,le=100)
     reference_id: str = Field(min_length=20,max_length=64,pattern=r'^[A-Za-z0-9_-]+$')
     settings: Settings = Field(default_factory=Settings)
 
 @app.get('/healthz')
 async def health():
-    return {'ready':engine is not None,'provider':engine.provider if engine else None,'model':'inswapper_128_fp16','version':4,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
+    return {'ready':engine is not None,'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':8,'app_version':'1.9.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
 
 async def execute(fn,*args):
     if engine is None: raise HTTPException(503,'El motor todavía se está cargando.')
@@ -64,13 +76,14 @@ async def execute(fn,*args):
             raise HTTPException(503,'No se pudo procesar este fotograma.') from e
 
 @app.post('/reference')
-async def reference(data:ImageInput):
+async def reference(data:ReferenceInput):
     if engine is None: raise HTTPException(503,'Motor no disponible.')
-    token=await execute(engine.reference,data.image,data.points)
-    return {'reference_id':token}
+    token=await execute(engine.reference,data.image,data.points,[v.model_dump() for v in data.views])
+    return {'reference_id':token,'reference_views':1+len(data.views)}
 
 @app.post('/frame')
 async def frame(data:FrameInput):
+    if data.client_protocol<5 or data.settings.transport!='patch':raise HTTPException(426,'Actualiza el código de Render, recarga la página y reinicia el motor de la PC con la entrega 1.9.')
     if engine is None: raise HTTPException(503,'Motor no disponible.')
     return await execute(engine.frame,data.reference_id,data.image,data.points,data.settings.model_dump())
 

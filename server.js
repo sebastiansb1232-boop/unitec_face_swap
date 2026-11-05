@@ -126,9 +126,9 @@ app.get('/api/admin/photos/:id', auth, asyncRoute(async (req, res) => {
   if (!rows.length) return res.status(404).json({ error: 'La foto ya no está disponible.' });
   res.json({ success: true, data: await historicalImage(rows[0]) });
 }));
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get('/healthz', (req, res) => res.json({ ok: true,version:require('./package.json').version,render_protocol:5 }));
 app.get('/config.js', (req, res) => res.type('js').send('window.SUPABASE_CONFIG = {};'));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'),{setHeaders(res,file){if(file.endsWith('.html'))res.set('Cache-Control','no-cache, must-revalidate');}}));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 app.use((error, req, res, next) => {
   res.status(error.status || 500).json({ error: error.type === 'entity.too.large' ? 'La foto es demasiado grande.' : (error.status ? error.message : 'No se pudo completar la operación. Inténtalo de nuevo.') });

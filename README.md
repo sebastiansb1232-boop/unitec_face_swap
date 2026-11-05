@@ -1,4 +1,4 @@
-> **Another Face 1.5.0 · IA remota.** La página puede funcionar en Render y el motor neuronal en tu PC, conectado por HTTPS y clave privada. Sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Para ejecutar todo en tu computadora, empieza con [INICIO-RAPIDO.md](INICIO-RAPIDO.md). Se conserva el estudio Retrato 7; sus mediciones y límites están en [RENDIMIENTO.md](RENDIMIENTO.md).
+> **Another Face 1.9.0 · Rostro alineado y perfiles propios.** Bloqueo de clientes antiguos, registro obligatorio del resultado neuronal, máscara en destino y ajuste de forma por vista. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render; subir solo la URL del túnel no actualiza la página.
 
 # Another Face
 
@@ -41,7 +41,7 @@ No se necesita `DATABASE_URL` ni `SUPABASE_ANON_KEY`. Las claves secretas nunca 
 
 ## Privacidad y límites
 
-En el modo ligero, el video y el seguimiento se procesan en el dispositivo. En el modo neuronal, la referencia y los recortes con sus puntos se envían al servidor para su procesamiento. Con IA remota pasan por Render y Cloudflare hasta el motor de tu PC, según el aviso visible de ese modo. Al pulsar Tomar foto se envía la captura para guardarla; solo se adjuntan sus coordenadas x/y/z si la persona marca esa opción. El efecto no verifica la identidad de la persona ni infiere género o edad.
+En Avatar fotográfico y en el modo ligero, el video y las referencias se procesan en el dispositivo. En el modo neuronal, las referencias y los recortes con sus puntos se envían al servidor para su procesamiento. Con IA remota pasan por Render y Cloudflare hasta el motor de tu PC, según el aviso visible de ese modo. Al pulsar Tomar foto se envía la captura para guardarla; solo se adjuntan sus coordenadas x/y/z si la persona marca esa opción. El efecto no verifica la identidad de la persona ni infiere género o edad.
 
 Los puntos son estimaciones geométricas del modelo, no medidas físicas, huellas biométricas fiables ni un reconocimiento de identidad. La apariencia de referencia se transfiere como efecto visual; no se verifica quién es la persona. La topología es común, pero las coordenadas se calculan para cada rostro. Ningún filtro puede garantizar ausencia de errores: poca luz, oclusiones, perfiles extremos y movimientos rápidos reducen la precisión. Se sigue un rostro a la vez.
 
@@ -59,7 +59,7 @@ Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y vario
 
 Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`. Para el motor neuronal: `npm run start:ai`, después de la instalación descrita en IA-LOCAL.md.
 
-Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega añade pruebas del proxy remoto, clave privada, protección del worker y cancelación de solicitudes: 40 pruebas JavaScript y 13 Python. Consulta MIGRAR-RENDER.md para los límites de la prueba de conexión y FILTRO-RETRATO.md para las comprobaciones de navegador anteriores con cámara simulada. No se han probado las credenciales reales ni un despliegue de esta actualización.
+Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega pasa 73 pruebas JavaScript y 33 Python, incluidas las de tres vistas, giro, profundidad, LivePortrait, clave privada y resultados atrasados. Las pruebas de navegador ejecutaron Avatar fotográfico y los generadores reales HyperSwap y LivePortrait en CPU, con captura y guardado simulado. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
 
 Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
 - Permitir y denegar cámara; encender, apagar y cambiar cámara.

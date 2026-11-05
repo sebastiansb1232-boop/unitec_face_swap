@@ -8,23 +8,17 @@
     reset(){this.previous=null;this.current=null;this.times=[];}
     update(points,time){
       if(!points||points.length<468||!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))){this.reset();return;}
-      const next={points:points.map(p=>({...p})),basis:basis(points),local:normalize(points),time};
+      const next={points:points.map(p=>({...p})),basis:basis(points),time};next.points.stamp=time;
       this.previous=this.current;this.current=next;this.times.push(time);this.times=this.times.slice(-16);
     }
     get fps(){return this.times.length>1?(this.times.length-1)*1000/Math.max(this.times.at(-1)-this.times[0],1):0;}
     predict(now){
       const c=this.current,p=this.previous;if(!c||now-c.time>700)return null;
       if(!p||c.time-p.time<8||c.time-p.time>700)return c.points;
-      const dt=(c.time-p.time)/1000,look=clamp((now-c.time)/1000,0,.055),b=c.basis,old=p.basis;
-      const speed=b.scale*4;
-      const origin={x:b.origin.x+clamp((b.origin.x-old.origin.x)/dt,-speed,speed)*look,y:b.origin.y+clamp((b.origin.y-old.origin.y)/dt,-speed,speed)*look};
-      const scale=b.scale+clamp((b.scale-old.scale)/dt,-b.scale,b.scale)*look;
-      let rotation=Math.atan2(b.x.y,b.x.x)-Math.atan2(old.x.y,old.x.x);
-      while(rotation>Math.PI)rotation-=2*Math.PI;while(rotation<-Math.PI)rotation+=2*Math.PI;
-      const angle=Math.atan2(b.x.y,b.x.x)+clamp(rotation/dt,-2.5,2.5)*look;
-      const sign=b.x.x*b.y.y-b.x.y*b.y.x<0?-1:1;
-      const x={x:Math.cos(angle),y:Math.sin(angle)},y={x:-Math.sin(angle)*sign,y:Math.cos(angle)*sign};
-      return project(c.local,{origin,x,y,scale});
+      const dt=(c.time-p.time)/1000,look=clamp((now-c.time)/1000,0,.035),b=c.basis,old=p.basis;
+      const speed=b.scale*3,dx=clamp((b.origin.x-old.origin.x)/dt,-speed,speed)*look,dy=clamp((b.origin.y-old.origin.y)/dt,-speed,speed)*look;
+      // Solo anticipar traslación; extrapolar el ancho 2D al girar estiraba la cara.
+      const out=c.points.map(q=>({...q,x:q.x+dx,y:q.y+dy}));out.stamp=c.time;return out;
     }
   }
   function faceCrop(points,width,height,limit=320){

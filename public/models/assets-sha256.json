@@ -43,5 +43,10 @@
     "path": "vendor/tasks-vision/wasm/vision_wasm_nosimd_internal.wasm",
     "bytes": 9448638,
     "sha256": "3821ea9b1f7fb8c549ef2a064ef5c85750bf375c545a49fd6eea0df44a95f1f4"
+  },
+  {
+    "path": "assets/models/face_landmarker.task",
+    "bytes": 3758596,
+    "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"
   }
 ]

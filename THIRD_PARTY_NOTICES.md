@@ -24,7 +24,7 @@ Las categorías utilizadas son cabello, piel corporal y piel facial. El modelo s
 
 ## Fotografías y recursos previos
 
-Las cuatro fotografías de referencia, el filtro Perrito y el favicon proceden del ZIP original del proyecto. No se añaden fotografías de otras personas. La nueva función permite cargar una referencia local sin incorporarla al ZIP ni enviarla al servidor.
+Las cuatro fotografías de referencia, el filtro Perrito y el favicon proceden del ZIP original del proyecto. No se añaden fotografías de otras personas. Las fotografías cargadas no se incorporan al ZIP: Avatar fotográfico y Ligero las procesan en el dispositivo; Neuronal las envía al motor según el aviso de procesamiento de la página.
 
 ## Integridad
 
@@ -39,3 +39,29 @@ local-ai/engine.py implementa alineación por similitud, la convención de norma
 Las URL de revisión y huellas de los pesos opcionales están en local-ai/models.json. Su descarga es explícita y los pesos no se incluyen en esta entrega. Consulta IA-LOCAL.md y los términos de los distribuidores para su ámbito de uso.
 
 Fuentes: https://deeplivecam.net/index.php/quickstart, https://github.com/hacksider/Deep-Live-Cam, https://github.com/deepinsight/insightface, https://huggingface.co/hacksider/deep-live-cam, https://huggingface.co/facefusion/models-3.0.0.
+# Topología de la máscara facial
+
+`local-ai/face_triangles.json` contiene la teselación de MediaPipe Face Mesh distribuida también en el componente local de MediaPipe. Se utiliza para rasterizar la superficie facial proyectada. Conserva la procedencia y licencia de MediaPipe indicadas en este documento.
+
+
+
+## HyperSwap 1C 256 (opcional desde 1.7.0)
+
+Pesos de FaceFusion Labs, copyright (c) 2025 Henry Ruhs. El autor indica ResearchRAIL-MS: https://github.com/facefusion/facefusion-labs/blob/master/hyperswap/LICENSE.md. Configuración de entrenamiento y código: https://github.com/facefusion/facefusion-labs/tree/master/hyperswap. Distribución oficial fijada: https://huggingface.co/facefusion/models-3.3.0/blob/6271ab1c4619ceb2e534d65e0ec973f22a9aec38/hyperswap_1c_256.onnx. No se distribuye el peso en este ZIP; se descarga explícitamente con tamaño y SHA-256 en local-ai/models.json. La integración de Another Face implementa el contrato de entrada/salida, conserva la máscara del modelo y no incorpora la aplicación FaceFusion. ArcFace e InSwapper mantienen las condiciones descritas arriba.
+
+## Face Landmarker (desde 1.8.0)
+
+Modelo oficial MediaPipe Tasks Vision, float16, revisión 1, conservado sin modificación en `public/assets/models/face_landmarker.task`:
+
+https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+
+Tamaño: 3758596 bytes. SHA-256: `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`.
+Guía oficial: https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker/web_js. Se utiliza con Tasks Vision 0.10.21 incluido en el proyecto. La cámara y el registro se ejecutan localmente; no se envían imágenes a Google. Conserva los avisos Apache 2.0 de MediaPipe indicados arriba.
+
+## LivePortrait ONNX (opcional desde 1.8.0)
+
+Fuente original: https://github.com/KlingAIResearch/LivePortrait. MIT License, copyright (c) 2024 Kuaishou Visual Generation and Interaction Center. Licencia original: https://github.com/KlingAIResearch/LivePortrait/blob/main/LICENSE. Su aviso distingue también los modelos de InsightFace, de investigación no comercial; esta integración mantiene ArcFace y sus condiciones.
+
+Las ecuaciones de rotación, movimiento relativo y el contrato de extracción/generación se implementan con NumPy y ONNX Runtime. La aplicación FaceFusion no se incorpora. El contrato de sus exportaciones ONNX se consultó en https://github.com/facefusion/facefusion/blob/master/facefusion/processors/modules/face_editor/core.py.
+
+Se descargan explícitamente cuatro modelos exportados por FaceFusion (feature_extractor, motion_extractor, generator y stitcher), revisión `728b9659bd9691bf32cbf7f61af478d94b7ba81e`: https://huggingface.co/facefusion/models-3.0.0/tree/728b9659bd9691bf32cbf7f61af478d94b7ba81e. Tamaños y SHA-256 exactos en `local-ai/models.json`. No se redistribuyen sus pesos en el ZIP. La licencia del código original no sustituye las condiciones del distribuidor o de componentes de terceros; consulta ambas antes de otros usos.

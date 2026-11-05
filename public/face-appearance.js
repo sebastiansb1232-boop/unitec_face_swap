@@ -40,7 +40,7 @@
         const cutoff=EXPRESSIVE.has(i)?mix(30,13,amount):mix(30,2.8,amount),beta=EXPRESSIVE.has(i)?35:18;
         return {x:this.filters[i][0].filter(p.x,dt,cutoff,beta),y:this.filters[i][1].filter(p.y,dt,cutoff,beta)};
       });
-      return amount<=0?points:project(stable,b);
+      return amount<=0?points:project(stable,b).map((p,i)=>({...points[i],...p}));
     }
   }
   function transfer(live,neutral,target,amount,options={}){
