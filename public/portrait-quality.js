@@ -3,6 +3,7 @@
   'use strict';
   const A=root.FaceAppearance||(typeof require==='function'?require('./face-appearance'):null);
   const {basis,normalize,clamp}=A;
+  const Mouth=root.MouthMotion||(typeof require==='function'?require('./mouth-motion'):null);
   const Pose=root.FacePose||(typeof require==='function'?require('./face-pose'):null);
   const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
   const HOLES=[...A.EYES,[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95]];
@@ -79,7 +80,7 @@
   }
   function expression(points){
     const ratio=([a,b,t,d])=>distance(points[t],points[d])/Math.max(distance(points[a],points[b]),1);
-    return [ratio([33,133,159,145]),ratio([263,362,386,374]),ratio([61,291,13,14])];
+    return [ratio([33,133,159,145]),ratio([263,362,386,374]),Mouth?Mouth.aperture(points):ratio([61,291,13,14])];
   }
   function identityProfile(input,generated,reference){
     if(!input||!generated||input.length<468||generated.length<468)return null;
@@ -182,7 +183,7 @@
       const browLift=clamp(BROWS.reduce((sum,i)=>sum+local[i].y-base[i].y,0)/Math.max(BROWS.length,1),-.08,.08)*(1-smooth(.3,1.1,Math.abs(b.yaw)));
       for(const id of BROWS)desired[id].y+=browLift;
       const dt=this.time===null?16:clamp(now-this.time,0,100),alpha=1-Math.exp(-dt/85);this.time=now;
-      const strength=clamp(amount,0,1),limits={x:.25,y:.28,z:.20};
+      const strength=clamp(amount,0,1),limits={x:this.range||.25,y:(this.range||.25)*1.12,z:(this.range||.25)*.8};
       let error=0;
       const output=local.map((p,i)=>{
         const offset=this.offsets3D[i],value={};

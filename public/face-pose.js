@@ -50,17 +50,25 @@
     return null;
   }
   class Stabilizer{
-    reset(){this.filters=null;this.time=null;this.previous=null;}
+    reset(){this.filters=null;this.time=null;this.previous=null;this.poseFilters=null;this.lastWidth=null;}
     constructor(){this.reset();}
     filter(points,width,amount,now){
-      const b=basis(points,width),local=normalize(points,width,b),elapsed=this.time===null?33:now-this.time,dt=clamp(elapsed/1000,.008,.1);
-      if(!this.filters||elapsed>300){this.filters=local.map(()=>[new A.EuroFilter(),new A.EuroFilter(),new A.EuroFilter()]);}
+      const raw=basis(points,width),local=normalize(points,width,raw),elapsed=this.time===null?33:now-this.time,dt=clamp(elapsed/1000,.008,.1),weight=clamp(amount,0,1);
+      if(!this.filters||elapsed>300||this.lastWidth!==width){this.filters=local.map(()=>[new A.EuroFilter(),new A.EuroFilter(),new A.EuroFilter()]);this.poseFilters=Array.from({length:10},()=>new A.EuroFilter());}
+      this.lastWidth=width;
+      // Antes solo se filtraba la forma: origen, escala y giro seguían vibrando.
+      const pose=[raw.origin.x/width,raw.origin.y/width,raw.origin.z/width,Math.log(raw.scale/width),raw.x.x,raw.x.y,raw.x.z,raw.y.x,raw.y.y,raw.y.z];
+      const q=pose.map((v,i)=>{const filtered=this.poseFilters[i].filter(v,dt,i<4?1.4:1.8,i<3?25:6);return v+(filtered-v)*weight;});
+      const x=unit({x:q[4],y:q[5],z:q[6]}),candidate={x:q[7],y:q[8],z:q[9]},y=unit(sub(candidate,mul(x,dot(candidate,x))));let z=unit(cross(x,y));if(z.z<0)z=mul(z,-1);
+      const b={...raw,origin:{x:q[0]*width,y:q[1]*width,z:q[2]*width},scale:Math.exp(q[3])*width,x,y,z};
       this.time=now;
       const stable=local.map((p,i)=>{
-        const fast=A.EXPRESSIVE.has(i),cutoff=fast?20:7,beta=fast?45:25,values=['x','y','z'].map((axis,k)=>this.filters[i][k].filter(p[axis],dt,cutoff,beta));
+        const fast=A.EXPRESSIVE.has(i),cutoff=fast?12:2.6,beta=fast?12:7,values=['x','y','z'].map((axis,k)=>this.filters[i][k].filter(p[axis],dt,cutoff,beta));
         return {x:p.x+(values[0]-p.x)*amount,y:p.y+(values[1]-p.y)*amount,z:p.z+(values[2]-p.z)*amount};
       });
-      const out=project(stable,b);return out.concat(points.slice(468).map(p=>({...p})));
+      const out=project(stable,b);
+      // El iris debe compartir el marco estabilizado; no se pega al marco crudo.
+      for(const p of points.slice(468)){const d=sub(pixel(p,width),raw.origin);out.push(...project([{x:dot(d,raw.x)/raw.scale,y:dot(d,raw.y)/raw.scale,z:dot(d,raw.z)/raw.scale}],b));}return out;
     }
   }
   const api={basis,normalize,project,fuseViews,validateView,Stabilizer,cross,dot,sub,length};

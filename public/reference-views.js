@@ -18,8 +18,8 @@
     attach(){
       const front=this.entries.get('front');if(!front)return null;
       const tone=r=>{if(!this.tones.has(r))this.tones.set(r,root.ReferenceTone?.sample(r.image,r.points)||null);return this.tones.get(r);};
-      const target=this.colorLocked?tone(front):null,prepared=r=>{const previous=this.prepared.get(r);if(previous?.target===target)return previous.image;const image=root.ReferenceTone?.balance(r.image,r.points,target,tone(r))||r.image;this.prepared.set(r,{target,image});return image;};
-      const views=[...this.entries].map(([side,r])=>({side,image:prepared(r),points:r.points,width:r.image.width,tone:target||tone(r)}));
+      const target=this.colorLocked?tone(front):null,prepared=r=>{const previous=this.prepared.get(r);if(previous?.target===target&&previous?.matte===r.renderImage)return previous;const image=root.ReferenceTone?.balance(r.image,r.points,target,tone(r))||r.image,renderImage=r.renderImage?(root.ReferenceTone?.balance(r.renderImage,r.points,target,tone(r))||r.renderImage):image;const value={target,image,renderImage,matte:r.renderImage};this.prepared.set(r,value);return value;};
+      const views=[...this.entries].map(([side,r])=>{const v=prepared(r);return {side,image:v.image,renderImage:v.renderImage,points:r.points,width:r.image.width,tone:target||tone(r)};});
       // Un objeto nuevo invalida el token anterior una sola vez, nunca al girar.
       this.reference={...front,uid:'views-'+this.version,views,toneTarget:target};return this.reference;
     }

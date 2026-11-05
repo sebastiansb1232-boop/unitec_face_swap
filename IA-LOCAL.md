@@ -1,6 +1,6 @@
-# IA local en Another Face 1.11.0
+# IA local en Another Face 1.12.0
 
-Esta entrega refina el tono entre fotos, los gestos neuronales y el contorno de perfil. Conserva **Avatar fotográfico en el navegador**, tres referencias y **LivePortrait opcional con salida de 512 píxeles**. HyperSwap e InSwapper siguen disponibles. El protocolo 5 exige actualizar tanto Render como la PC: las texturas se muestran solo tras verificar su registro facial. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para las diferencias, los límites y la actualización de PC y Render.
+Esta entrega estabiliza la pose, conserva el interior oral de cámara y permite elegir el tono de piel. Añade LaMa opcional para preparar el fondo tras el contorno original. Conserva **Avatar fotográfico en el navegador**, tres referencias y **LivePortrait opcional con salida de 512 píxeles**. HyperSwap e InSwapper siguen disponibles. El protocolo 5 exige actualizar tanto Render como la PC: las texturas se muestran solo tras verificar su registro facial. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para las diferencias, los límites y la actualización de PC y Render.
 
 ## Primera instalación en Windows
 
@@ -35,6 +35,10 @@ npm.cmd run start:ai
 ```
 
 Añade 338 MB. El comando con la variable sirve la web y Avatar en esa PC. Para volver a la selección automática en esa terminal, detén el proceso, ejecuta `Remove-Item Env:ANOTHERFACE_SWAPPER` e inicia de nuevo. La selección automática prefiere HyperSwap completo y después InSwapper; instalar Avatar no la cambia.
+
+## Fondo opcional con LaMa
+
+Con el motor detenido, ejecuta `.\instalar-relleno-ia.bat`. Descarga 208 MB con revisión y SHA-256 fijados y reutiliza el entorno sin cambiar el runtime GPU. Reinicia el motor y utiliza **Retirar contorno original → Generar fondo con IA · LaMa**. Se ejecuta una vez por preparación; no por fotograma. La cámara debe permanecer fija y el fondo puede contener detalles inventados. La alternativa **Capturar fondo** conserva el fondo real sin descargar LaMa. Consulta MEJORAS-RETRATO.md para los controles.
 
 ## Página en Render, motor en tu PC
 
@@ -106,7 +110,7 @@ Opcionalmente descarga Avatar con `.venv-ai/bin/python local-ai/download_models.
 
 ## Datos y pruebas
 
-En modo neuronal remoto, las referencias y los recortes pasan por Render y Cloudflare hacia la PC, según el aviso visible. No se envían a los distribuidores de pesos. El motor no escribe fotos en disco; conserva vectores y, en Avatar, características de apariencia en RAM. Máximo tres referencias Avatar u ocho de intercambio, vencimiento tras 15 minutos sin uso y limpieza periódica. Solo se guarda una captura al pulsar Tomar foto.
+En modo neuronal remoto, las referencias y los recortes pasan por Render y Cloudflare hacia la PC, según el aviso visible. No se envían a los distribuidores de pesos. El motor no escribe fotos en disco; conserva vectores y, en Avatar, características de apariencia en RAM. Máximo tres referencias Avatar u ocho de intercambio, vencimiento tras 15 minutos sin uso y limpieza periódica. LaMa recibe una imagen y sus puntos cuando se solicita generar el fondo; la imagen preparada permanece en memoria del navegador. Solo se guarda una captura al pulsar Tomar foto.
 
 Pruebas:
 
@@ -115,6 +119,6 @@ npm.cmd test
 .\.venv-ai\Scripts\python.exe -m unittest discover -s local-ai -p "test_*.py" -v
 ```
 
-La entrega pasa 88 pruebas JavaScript y 34 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
+La entrega pasa 95 pruebas JavaScript y 41 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
 
-Los pesos se descargan explícitamente con revisión, tamaño y SHA-256 en `local-ai/models.json`; no se incluyen en el ZIP. ArcFace/InSwapper son de investigación no comercial; HyperSwap indica ResearchRAIL-MS. El código original LivePortrait es MIT, con condiciones separadas para componentes de terceros. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Los pesos se descargan explícitamente con revisión, tamaño y SHA-256 en `local-ai/models.json`; no se incluyen en el ZIP. ArcFace/InSwapper son de investigación no comercial; HyperSwap indica ResearchRAIL-MS. LaMa indica Apache 2.0. El código original LivePortrait es MIT, con condiciones separadas para componentes de terceros. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

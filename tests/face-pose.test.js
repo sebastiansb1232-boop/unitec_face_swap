@@ -9,6 +9,12 @@ function view(p,yaw=0,mirror=false){
  const c=Math.cos(yaw),s=Math.sin(yaw),width=600;
  return p.map(q=>({x:mirror?width-(300+150*(q.x*c+q.z*s)):300+150*(q.x*c+q.z*s),y:150+150*q.y,z:150*(-q.x*s+q.z*c)/width}));
 }
+test('la estabilización reduce vibración de posición, escala y giro sin fijar la cabeza',()=>{
+ const s=new P.Stabilizer(),base=canonical();let rawEnergy=0,filteredEnergy=0,previous,previousRaw,out;
+ for(let i=0;i<90;i++){const sign=i%2?1:-1,p=view(base,sign*.012).map(q=>({...q,x:q.x+sign*1.8,y:q.y-sign*1.1}));out=s.filter(p,600,.85,i*33);const b=P.basis(out,600),r=P.basis(p,600);if(i>20){rawEnergy+=Math.hypot(r.origin.x-previousRaw.origin.x,r.origin.y-previousRaw.origin.y)+Math.abs(r.yaw-previousRaw.yaw)*150;filteredEnergy+=Math.hypot(b.origin.x-previous.origin.x,b.origin.y-previous.origin.y)+Math.abs(b.yaw-previous.yaw)*150;}previous=b;previousRaw=r;}
+ assert.ok(filteredEnergy<rawEnergy*.55,'rigid frame must be filtered too');
+ const moved=view(base,.35).map(q=>({...q,x:q.x+45}));for(let i=0;i<12;i++)out=s.filter(moved,600,.85,3000+i*33);assert.ok(Math.abs(P.basis(out,600).origin.x-P.basis(moved,600).origin.x)<3);assert.ok(Math.abs(P.basis(out,600).yaw-.35)<.02||Math.abs(P.basis(out,600).yaw+.35)<.02);
+});
 test('la boca fotográfica abre de perfil y cierra sin conservar la abertura de la foto',()=>{
  const reference=canonical(),opened=canonical();opened[13].y=.70;opened[14].y=1.04;
  for(const yaw of [-.9,0,.9]){const neutral=view(reference,yaw),live=view(opened,yaw),key={width:600,referencePhoto:true,activeView:'front',sourcePoints:neutral,referenceViews:[{side:'front',points:neutral,width:600}],referenceId:'mouth-'+yaw},shape=new Q.IdentityShape();let out;for(let i=0;i<60;i++)out=shape.apply(live,key,1,i*33,[]);const local=P.normalize(out,600);assert.ok(local[14].y-local[13].y>.25,'mouth must open at '+yaw);}

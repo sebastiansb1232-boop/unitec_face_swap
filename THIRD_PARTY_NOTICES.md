@@ -22,6 +22,8 @@ Guía de implementación web: https://developers.google.com/edge/mediapipe/solut
 
 Las categorías utilizadas son cabello, piel corporal y piel facial. El modelo se ejecuta en el dispositivo; no se envían las imágenes a Google. El código de Another Face no entrena ni modifica estos pesos.
 
+Desde 1.12 también se prepara una máscara por fotografía de referencia, reutilizando este mismo modelo. No se ejecuta segmentación adicional por cada fotograma ni se incorpora un detector semántico de lengua.
+
 ## Fotografías y recursos previos
 
 Las cuatro fotografías de referencia, el filtro Perrito y el favicon proceden del ZIP original del proyecto. No se añaden fotografías de otras personas. Las fotografías cargadas no se incorporan al ZIP: Avatar fotográfico y Ligero las procesan en el dispositivo; Neuronal las envía al motor según el aviso de procesamiento de la página.
@@ -65,3 +67,11 @@ Fuente original: https://github.com/KlingAIResearch/LivePortrait. MIT License, c
 Las ecuaciones de rotación, movimiento relativo y el contrato de extracción/generación se implementan con NumPy y ONNX Runtime. La aplicación FaceFusion no se incorpora. El contrato de sus exportaciones ONNX se consultó en https://github.com/facefusion/facefusion/blob/master/facefusion/processors/modules/face_editor/core.py.
 
 Se descargan explícitamente cuatro modelos exportados por FaceFusion (feature_extractor, motion_extractor, generator y stitcher), revisión `728b9659bd9691bf32cbf7f61af478d94b7ba81e`: https://huggingface.co/facefusion/models-3.0.0/tree/728b9659bd9691bf32cbf7f61af478d94b7ba81e. Tamaños y SHA-256 exactos en `local-ai/models.json`. No se redistribuyen sus pesos en el ZIP. La licencia del código original no sustituye las condiciones del distribuidor o de componentes de terceros; consulta ambas antes de otros usos.
+
+## LaMa ONNX (relleno opcional desde 1.12.0)
+
+Fuente original de LaMa: https://github.com/advimman/lama. Exportación de Carve: https://huggingface.co/Carve/LaMa-ONNX y https://github.com/Carve-Photos/lama. Sus avisos indican Apache-2.0. Se utiliza el contrato de entrada fija de 512 píxeles, imagen RGB CHW en 0–1 y máscara con 1 para retirar; la salida es RGB CHW en 0–255. La aplicación de Carve no se incorpora.
+
+Descarga explícita de `lama_fp32.onnx`, revisión `c3c0c9e468934d62e79c329e35d82dd09ff8c444`, 208044816 bytes, SHA-256 `1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6`. Las URL y la huella se conservan en `local-ai/models.json`. No se incluyen los pesos en este ZIP. El texto Apache 2.0 está en `public/vendor/LICENSE-APACHE-2.0.txt`.
+
+Solo se solicita al pulsar Generar fondo con IA. Las imágenes se procesan en el motor configurado de Another Face; no se envían a Carve ni a Hugging Face. Capturar un fondo limpio manualmente no requiere este modelo.

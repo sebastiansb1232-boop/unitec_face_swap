@@ -26,7 +26,7 @@
       if(!this.photoCache.has(view.side)){
         const uv=view.points.map(p=>({x:p.x/view.image.width,y:p.y/view.image.height}));
         let lightLuma=0;try{const sample=document.createElement('canvas');sample.width=sample.height=32;const ctx=sample.getContext('2d');ctx.drawImage(view.image,0,0,32,32);lightLuma=[50,280,151].reduce((sum,id)=>{const p=view.points[id],pixel=ctx.getImageData(Math.max(0,Math.min(31,Math.round(p.x/view.image.width*31))),Math.max(0,Math.min(31,Math.round(p.y/view.image.height*31))),1,1).data;return sum+(.299*pixel[0]+.587*pixel[1]+.114*pixel[2])/765;},0);}catch{}
-        this.photoCache.set(view.side,{image:view.image,layer:null,rectangularLayer:true,referencePhoto:true,activeView:view.side,uv,inputUV:uv,input:view.image,textureW:view.image.width,textureH:view.image.height,width,height,sourcePoints:points.map(p=>({...p})),referenceViews:views.map(v=>({side:v.side,points:v.points,width:v.width||v.image.width})),referenceId:identity,referencePoints:reference.points,registered:true,stableIdentity:true,yaw:root.FacePose.basis(view.points,view.image.width).yaw,received:now,lightLuma,passes:0,model:'photo_avatar',referenceCount:views.length});
+        this.photoCache.set(view.side,{image:view.renderImage||view.image,layer:null,rectangularLayer:true,referencePhoto:true,activeView:view.side,uv,inputUV:uv,input:view.image,textureW:view.image.width,textureH:view.image.height,width,height,sourcePoints:points.map(p=>({...p})),referenceViews:views.map(v=>({side:v.side,points:v.points,width:v.width||v.image.width})),referenceId:identity,referencePoints:reference.points,registered:true,stableIdentity:true,yaw:root.FacePose.basis(view.points,view.image.width).yaw,received:now,lightLuma,passes:0,model:'photo_avatar',referenceCount:views.length});
       }
       return this.photoCache.get(view.side);
     }
@@ -87,7 +87,7 @@
             // No mostrar la textura con el UV anterior ni interpolar desde él:
             // sus ojos podrían estar en la frente. La primera vista ya es válida.
             key.uv=fitted;key.registered=true;key.alignmentMs=Math.round(performance.now()-alignmentStarted);
-            key.referenceLayers=views;key.generatedPoints=detected.slice(0,468).map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}));
+            key.referenceLayers=views;key.generatedPoints=detected.slice(0,468).map(p=>({x:p.x*textureW,y:p.y*textureH,z:p.z||0}));if(root.MouthMotion)key.generatedPoints=root.MouthMotion.sanitize(key.generatedPoints);
             key.toneTarget=reference.toneTarget;key.toneSource=root.ReferenceTone?.sample(image,key.generatedPoints)||null;
             if(key.toneTarget&&key.toneSource){key.image=root.ReferenceTone.balance(image,key.generatedPoints,key.toneTarget,key.toneSource);key.layer=null;}
             const previous=this.validCache.get(bin);

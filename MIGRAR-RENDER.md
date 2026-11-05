@@ -1,6 +1,6 @@
 # Another Face: página en Render e IA en tu PC
 
-**Actualización 1.11.0:** consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para las tres fotografías, las proporciones con profundidad estimada y LivePortrait opcional. Actualiza el código de Render y de tu PC, conservando claves y modelos. El estado actual utiliza `render_protocol: 5`, `reference_views: 3` y `patch_output: true`. El modo Avatar fotográfico del navegador funciona sin worker ni túnel; esta guía corresponde a la opción Neuronal.
+**Actualización 1.12.0:** consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para estabilización, boca natural, selección de tono, tres fotografías y relleno opcional con LaMa. Actualiza el código de Render y de tu PC, conservando claves y modelos. El estado actual utiliza `render_protocol: 5`, `reference_views: 3` y `patch_output: true`. El modo Avatar fotográfico del navegador funciona sin worker ni túnel; esta guía corresponde a la opción Neuronal.
 
 La conexión introducida en 1.5.0 permite separar la página del motor neuronal. Render sirve la web y transmite las solicitudes al motor de tu PC mediante un túnel HTTPS. La PC ejecuta ArcFace y el modelo de intercambio instalado con el proveedor disponible; el navegador conserva el seguimiento y la composición en vivo. Puedes abrir la web desde un celular con cámara y HTTPS.
 

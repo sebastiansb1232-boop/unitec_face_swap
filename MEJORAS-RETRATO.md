@@ -1,55 +1,19 @@
-# Another Face 1.11.0 · Integración con la cámara y labios de perfil
+# Another Face 1.12.0 · Boca natural, estabilidad y tono de cámara
 
-## Cambios actuales
+## Qué cambia
 
-- Las referencias conservan su corrección entre vistas y ahora se integran con el color de la cámara. Se muestrea una copia de 160 píxeles aproximadamente cuatro veces por segundo, con corrección de espejo. La luz objetivo se suaviza en el tiempo; al cambiar de foto se recalcula la corrección desde esa foto, para evitar aplicar durante unos instantes la corrección de la anterior.
-- La adaptación de luminancia y matiz es acotada y uniforme; conserva textura sin aplicar desenfoque a la piel. La región de los ojos recibe una corrección menor. El borde facial utiliza una transición más amplia para reducir el corte de frente y mandíbula.
-- La asistencia oral incluye labios e interior también en perfiles de hasta aproximadamente 70 grados. Avatar fotográfico adapta su apertura a la boca actual; el generador neuronal conserva su boca cuando ya coincide. Se evita estirar los labios cerrados de una foto sobre una boca abierta.
-- Se envían a WebGL solo los vértices usados. La reposición del contorno dibuja únicamente el anillo exterior, evitando repintar toda la superficie facial en una pasada adicional.
-- Continúa LivePortrait de 512 píxeles nativos; esta entrega reutiliza los modelos instalados. Los cambios corrigen la composición y no convierten una referencia borrosa en detalle HD ni añaden entrenamiento a los pesos.
+- **Lengua y labios:** se limita la geometría interior a un contorno labial robusto, calculado con varios puntos. Un punto que salta hacia la lengua ya no arrastra el borde inferior. «Boca natural», activada por defecto, conserva labios, dientes y lengua de la cámara y los adapta al retrato mediante una sola transformación afín. El interior deja de depender de deformaciones triangulares independientes y se evita que la profundidad de otros triángulos lo corte. Se mantiene incluso con los labios cerrados en poses compatibles, para que una apertura pequeña no vuelva a pegar los labios de la referencia. Se puede desactivar para conservar la boca generada.
+- **Vibración:** el filtro temporal estabiliza posición, escala y orientación, además de la forma local. El iris comparte ese marco estabilizado. La imagen de cámara se muestrea con sus coordenadas originales, separadas de las coordenadas suavizadas de la malla; así no se cambia su origen de textura al estabilizarla.
+- **Color de piel:** el selector permite «Mi tono · Cámara», «Intermedio · Cámara y referencia» o «Referencia · Fotografías». Intermedio tiene una mezcla ajustable. Cámara es el valor inicial y utiliza el tono mediano de mejillas y frente; conserva la textura y tiene límites de corrección. El objetivo de cámara se suaviza en el tiempo. La unificación entre fotos sigue siendo independiente y evita que cada perfil introduzca otro matiz. El modo ligero también utiliza la decisión de tono.
+- **Perfiles:** las referencias fotográficas reciben una máscara de segmentación preparada una sola vez con el modelo MediaPipe ya incluido. Se evita llevar el fondo de la foto sobre la nariz o el ojo oculto. La imagen original se conserva para el generador. La geometría mantiene los controles de inversión de triángulos y las proporciones propias de cada vista.
+- **Contorno y fondo:** «Retirar contorno original» permite capturar un fondo limpio o prepararlo con LaMa. El fondo queda bajo la nueva capa facial, limitado al contorno original, y cubre también los espacios transparentes y el borde suave. Así se retira el espacio que deja una nariz o mentón más pequeño sin conservar debajo rasgos de la cámara. Con un fondo preparado se amplía el margen de cambio geométrico. Sin fondo se mantiene la reproyección anterior.
+- **Composición:** se elimina la antigua ganancia global de luz y sus lecturas redundantes, se reutilizan las texturas y se mantiene una sola generación facial en vuelo. La etiqueta de la vista distingue IA neuronal, apoyo fotográfico y Avatar fotográfico según la textura que se está mostrando.
 
-En las capturas nuevas está seleccionado Avatar fotográfico en una de las vistas. Ese modo anima fotos localmente; para generar una imagen con LivePortrait selecciona Neuronal e inicia `iniciar-avatar-ia.bat`. Se corrigen ambos caminos de composición.
+LivePortrait conserva su salida nativa de 512. LaMa es una incorporación real para el fondo; no sustituye al generador facial ni se ejecuta por fotograma. No se ha entrenado un modelo nuevo de segmentación de lengua: la corrección conserva el interior oral de la cámara y hace más robustos sus límites. Una lengua muy extendida fuera del contorno, las oclusiones y los giros extremos todavía pueden superar la estimación facial.
 
-## Actualizar desde 1.10
+## Actualizar en tu misma carpeta
 
-Copia el código en la misma carpeta Another-Face conservando `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`. Ejecuta `npm.cmd ci`, reinicia el worker con `iniciar-avatar-ia.bat` y actualiza main y Render. Mantén el túnel abierto para reutilizar su URL. Si creas otro, actualiza `ANOTHERFACE_AI_URL`. La cabecera y el motor deben indicar 1.11.0; los archivos del cliente usan caché v14. No hace falta repetir el instalador si LivePortrait ya está completo.
-
-## Verificación de esta entrega
-
-Pasan **88 pruebas JavaScript y 34 Python**. La página completa se comprobó con Avatar fotográfico y LivePortrait real en CPU, con captura guardada en un servidor simulado, sin errores de JavaScript ni WebGL. La vista osciló entre 26–29 FPS en esos ensayos; una generación LivePortrait tardó unos 13 segundos en CPU. No es una comparación controlada con la versión anterior ni una medida de tu GPU. Las pruebas incluyen adaptación temporal de tono, cambio entre referencias con distinta exposición, asistencia oral lateral y apertura de boca en perfil. Se realizan comprobaciones de píxeles, WebGL y captura con cámara simulada. Las capturas aportadas muestran el resultado filtrado; no sustituyen el video original para evaluar todos los gestos. La frecuencia neuronal depende del hardware; el contador de vista no es el de generaciones.
-
----
-
-## Guía y comprobaciones de la entrega anterior (1.10)
-
-# Another Face 1.10.0 · Color coherente y gestos más estables
-
-Esta entrega refina Neuronal, Avatar fotográfico y el tono del filtro ligero. Mantiene LivePortrait 512, HyperSwap e InSwapper y el puente protegido entre Render y tu PC. No añade modelos ni dependencias a la instalación existente.
-
-## Cambios del retrato
-
-- **Color entre vistas:** «Unificar tono entre vistas» utiliza el matiz de la frontal para preparar las referencias laterales y cada resultado neuronal. Muestrea mejillas y frente con estadísticas robustas, sin reglas RGB que excluyan tonos de piel. Acerca la exposición con límites y conserva variaciones de luz, textura, ojos y labios; no intenta igualar a la fuerza una foto oscura con una frontal sobreexpuesta. La corrección tiene un borde amplio y suave dentro de la piel.
-- **Boca:** la geometría neuronal parte de los rasgos realmente detectados en la imagen generada. Se añade únicamente el cambio desde el gesto de cámara que produjo esa imagen. Así se evita volver a abrir una boca que el modelo ya había abierto. Se limitan de forma continua la apertura, la sonrisa y el movimiento de mandíbula, con límites menores de perfil.
-- **Interior oral:** cuando una textura antigua no contiene la apertura actual, se integra solo el interior oral de la cámara en poses compatibles. Se trata igual el borde interior y el centro, para evitar un abanico de triángulos entre lengua y labios. Esta asistencia no es una nueva generación neuronal.
-- **Ojos:** movimiento de mirada acotado y suavizado. Si una generación conserva un párpado cerrado cuando ya abriste el ojo, se asiste esa región con el ojo de la referencia correspondiente. Se evita dibujar el abanico del ojo lejano cuando su proyección es demasiado estrecha.
-- **Perfil y contorno:** la silueta incluye nariz y labios que sobresalen del óvalo al girar. La reposición del fondo tiene una cobertura propia: ya no depende del borde transparente del rostro. Esto corrige una causa del antiguo contorno de nariz o mentón visible detrás. Se comprueba también que las deformaciones no inviertan triángulos en pantalla.
-- **Movimiento:** predicción rígida 3D breve entre detecciones, sin estirar el ancho facial. Los gestos conservan límites propios; la predicción no cuenta como detección ni generación.
-- **LivePortrait:** transferencia relativa de expresión con un límite suave por punto y amortiguación mayor en giros fuertes. La primera generación espera tres muestras neutrales distintas; mira de frente, abre los ojos y relaja la boca. Cambiar un ajuste conserva la calibración del conductor.
-- **Ligero:** conserva el tono de referencia al activar la unificación y evita muestrear el color de la cámara continuamente. Sigue siendo un filtro clásico pensado para vistas frontales; las mejoras de geometría de perfil corresponden a Avatar y Neuronal.
-
-## Menos trabajo y menos saturación
-
-El motor envía una sola textura JPEG de calidad 95 con la malla alineada, en lugar de enviar además una segunda copia PNG opaca. La opción interna `texture_codec: "png"` se conserva para comparaciones. Se reduce codificación y tráfico sin modificar la resolución nativa del generador.
-
-Se mantiene una inferencia en vuelo. Ajustar parecido o calidad invalida resultados antiguos sin cancelar innecesariamente el trabajo que aún ocupa la GPU. Una pérdida breve del seguimiento retira la capa; se recalibra solo después de una ausencia sostenida. Las respuestas «ocupado» respetan `Retry-After` y aumentan la espera hasta un máximo de ocho segundos, manteniendo activa la vista local. La referencia se reutiliza mientras no cambie la identidad.
-
-La corrección de color se prepara una vez por imagen. El renderizador reutiliza texturas y los contornos de la misma muestra. Los nuevos controles de perfil añaden trabajo gráfico: la mejora de transporte no implica por sí sola más generaciones por segundo.
-
-## Actualizar tu instalación existente
-
-1. Detén el worker con **Ctrl + C**. Puedes conservar el túnel abierto si sigue apuntando a `127.0.0.1:8766`.
-2. Copia el contenido de `Another-Face` de este ZIP dentro de **tu misma carpeta Another-Face**, reemplazando el código. Conserva `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`. No coloques una segunda carpeta Another-Face dentro de la primera.
-3. En PowerShell:
+Detén el motor con **Ctrl + C**. Copia el contenido de la carpeta Another-Face del ZIP sobre tu carpeta existente. Conserva `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`; evita crear una carpeta Another-Face dentro de otra.
 
 ```powershell
 cd "C:\Users\sebastian estevan\Desktop\FIEE-unitec\Another-Face"
@@ -57,46 +21,45 @@ npm.cmd ci
 .\iniciar-avatar-ia.bat
 ```
 
-Esto inicia LivePortrait con autenticación obligatoria. Si ya descargaste sus cuatro modelos en la entrega anterior, **no repitas el instalador**. Si nunca lo instalaste, ejecuta una sola vez `.\instalar-avatar-local.bat` antes de iniciarlo; añade 338 MB y reutiliza los modelos completos. Para conservar HyperSwap o la selección automática, utiliza `npm.cmd run start:worker`.
+Si ya instalaste LivePortrait, no repitas su instalador. Si falta, ejecuta una vez `.\instalar-avatar-local.bat`; descarga 338 MB adicionales. Para servir la web y el motor juntos en localhost, utiliza `$env:ANOTHERFACE_SWAPPER="avatar"` seguido de `npm.cmd run start:ai` en lugar del worker.
 
-4. Si el túnel se cerró, abre otra terminal:
+Puedes mantener el túnel abierto mientras reinicias el motor en el mismo puerto. Si lo cerraste, abre otra terminal en la misma carpeta y ejecuta `.\iniciar-tunel-ia.bat`. Una dirección nueva exige actualizar `ANOTHERFACE_AI_URL` en Render; el token debe seguir coincidiendo con `.env.ai`.
 
-```powershell
-cd "C:\Users\sebastian estevan\Desktop\FIEE-unitec\Another-Face"
-.\iniciar-tunel-ia.bat
-```
-
-Conserva ambas terminales abiertas. Si se creó otra dirección, actualiza `ANOTHERFACE_AI_URL` en Render con la nueva URL HTTPS. Mantén `ANOTHERFACE_AI_TOKEN` igual al de `.env.ai`.
-
-5. Actualiza **main del mismo repositorio** que usa Render, desde tu carpeta Another-Face:
+Publica el código en **main del repositorio existente**, desde esa misma carpeta:
 
 ```powershell
 git rev-parse --show-toplevel
 git status
 git add public local-ai scripts tests supabase *.js *.json *.md *.bat render.yaml .gitignore .env.example
-git commit -m "Refina color, gestos y rendimiento de Another Face 1.10.0"
+git diff --cached --stat
+git commit -m "Estabiliza malla, boca, lengua y tono de Another Face 1.12.0"
 git push origin main
 ```
 
-El primer comando debe mostrar la carpeta Another-Face. Revisa que la lista de cambios pertenezca al proyecto antes del commit. Los modelos, entornos y archivos privados quedan excluidos. No se requiere otra rama ni otro clon para publicar una instalación que ya tiene el repositorio configurado.
+Comprueba que la raíz y la lista de archivos corresponden a Another-Face antes del commit. El ZIP excluye modelos locales, entornos, claves y archivos personales. En tu servicio existente de Render despliega el último commit de main: Build `npm ci`, Start `npm start`. Recarga con **Ctrl + F5**. La cabecera y `/api/neural/status` deben mostrar **1.12.0** para web y motor, con `ready: true` y protocolo 5. Cambiar solamente la URL del túnel no actualiza el código.
 
-6. En el servicio existente de Render, despliega el último commit de **main**. Build: `npm ci`. Start: `npm start`. Cambiar únicamente la URL del túnel no actualiza la página.
-7. Recarga con **Ctrl + F5**. Comprueba **v1.10.0** en la cabecera. `/healthz` debe mostrar `version: "1.10.0"`. `/api/neural/status` debe indicar `web_version: "1.10.0"`, `engine_version: "1.10.0"`, `proxy_protocol: 5`, `render_protocol: 5` y `ready: true`.
+## Ajustes y fondo
 
-## Ajustes para comparar
+1. Selecciona **Neuronal · Generador de la PC**, perfil Natural, y deja **Boca natural** activada. Mira de frente con la boca relajada para calibrar. Carga una frontal y perfiles opuestos de la misma persona, con ojos visibles y sin sombras intensas.
+2. En **Color de piel**, prueba **Mi tono · Cámara**. Elige **Intermedio** para conservar parte del tono de la referencia; su porcentaje indica cuánto de la referencia se conserva. Con Referencia se mantiene su color preparado, aunque puede contrastar con el cuello de cámara.
+3. Para retirar una nariz o mandíbula que sobresalga, fija la cámara y abre **Retirar contorno original**. **Capturar fondo** espera tres segundos para que salgas por completo del encuadre; vuelve después de que se confirme la captura. Es la opción que conserva el fondo real.
+4. Como alternativa opcional, con el motor detenido ejecuta:
 
-Carga una frontal nítida y dos perfiles opuestos de la misma persona, preferiblemente con expresión neutral y ojos visibles. Deja «Unificar tono entre vistas» activado. Prueba primero Natural, con parecido neuronal entre 65–75 % y mezcla de ojos, boca, frente y mentón originales en cero. «Proporciones de referencia» controla cuánto cambia la geometría: bájalo si un gesto extremo todavía deforma el rostro. La mezcla oral automática conserva solo el interior necesario.
+```powershell
+.\instalar-relleno-ia.bat
+.\iniciar-avatar-ia.bat
+```
 
-Al cambiar de cámara o persona, utiliza «Recalibrar mi rostro» mirando de frente. Las fotografías con boca abierta, sombras muy fuertes, cabello sobre los ojos o perfil totalmente lateral limitan el detalle que puede recuperarse. El cuello, las orejas, el cabello y el cuerpo siguen siendo de la cámara cuando se intercambia solo el rostro.
+Esto descarga **LaMa, 208 MB**, con revisión, tamaño y SHA-256 fijados; utiliza el entorno existente y no reinstala DirectML/CUDA. En la página pulsa **Generar fondo con IA · LaMa**. Se envía una imagen al motor de tu PC mediante la conexión configurada; la generación facial se pausa mientras se prepara. LaMa puede inventar detalles detrás de la cabeza.
 
-## Comprobación y límites
+Mantén la cámara fija mientras se use cualquiera de los fondos. Si la mueves o cambia el escenario, quita el fondo y prepáralo de nuevo. Cambiar de cámara, resolución o apagarla invalida el fondo. La imagen se conserva en memoria, no se guarda en disco ni se genera continuamente.
 
-Pasan **83 pruebas JavaScript y 34 Python**. Comprueban color, cambios relativos de expresión, perfil, inversión de triángulos, predicción rígida, calibración, una inferencia en vuelo, reintentos, autenticación y guardado simulado.
+## Verificación y rendimiento
 
-La página completa pasó una prueba con las tres referencias, LivePortrait real en CPU, registro del rostro generado y captura con malla guardada en un Supabase simulado. No hubo errores de JavaScript ni WebGL ni desbordamiento a 390 píxeles. Las pruebas de píxeles comprobaron el ojo de referencia como asistencia, la mezcla opcional del ojo original y la retirada del contorno anterior al reducir el mentón, también con texturas rectangulares. Ambos perfiles reales se dibujaron sin desplazamiento espurio en una prueba con la misma foto como fuente y destino.
+Pasan **95 pruebas JavaScript y 41 Python**. Incluyen geometría y seguimiento, estabilización rígida con ruido, tono de cámara/intermedio/referencia, límites de labios, apertura robusta ante un punto desviado hacia la lengua, autenticación, exclusión mutua del motor y estados de LaMa ausente/ocupado.
 
-En ese ensayo, la vista rondó **27 FPS** y el seguimiento entre **12–16 FPS**. LivePortrait tardó unos **14 segundos** en generar en CPU; recibir un resultado tardó unos 17,4 segundos con preparación de referencias. Son métricas distintas, sin comparación directa con 1.9. Los ensayos utilizan cámara simulada y gráficos por software; no equivalen a medir tu GPU ni al video original de las capturas adjuntas.
+En Chromium se comprobaron la página con tres referencias, LivePortrait real en CPU, registro facial, selección de tono, captura y guardado simulado y presentación a 390 píxeles, sin errores JavaScript ni WebGL. Otra prueba ejecutó el botón de LaMa con el modelo real a través del proxy protegido, captura manual de fondo y posterior guardado. Las comprobaciones de píxeles verifican los tres tonos, la conservación de un interior oral de cámara ante un punto dañado y el reemplazo del antiguo contorno de nariz por un fondo preparado. Ambos perfiles reales se dibujaron sin desplazamiento espurio usando la misma imagen como fuente y destino.
 
-Vista, Seguimiento e IA conservan contadores separados. Una vista fluida puede reutilizar una textura mientras LivePortrait genera otra. **No se garantizan 30 FPS neuronales ni la desaparición de todos los artefactos en giros extremos.** El generador mantiene sus 512 píxeles nativos; subir la resolución mostrada o añadir pasadas no convierte automáticamente la salida en detalle nuevo.
+En esos ensayos con cámara simulada y gráficos por software, la vista rondó **10–28 FPS**, el seguimiento **6–14 FPS**, LivePortrait tardó **14,9–16,5 segundos de inferencia en CPU** y LaMa unos **15,2 segundos** en la prueba aislada. No son mediciones de tu GPU ni una comparación controlada con 1.11. Una composición reutilizada no cuenta como una generación neuronal nueva. No se prometen 30 FPS neuronales ni ausencia total de artefactos: las capturas filtradas aportadas no sustituyen un video original para evaluar todos los movimientos.
 
-Para medir el generador de tu PC, detén el worker y ejecuta `.\medir-ia-local.bat --avatar`. La medición descarta el calentamiento y excluye seguimiento, extracción de movimiento, compresión, red y dibujo; no debe confundirse con los FPS del recorrido completo.
+Para medir el generador en tu PC, detén el worker y ejecuta `.\medir-ia-local.bat --avatar`. El medidor excluye seguimiento, extracción de movimiento, compresión, red y dibujo. Más hilos o un modelo mayor no garantizan más FPS; no se han medido CUDA ni DirectML en una GPU física en este entorno.

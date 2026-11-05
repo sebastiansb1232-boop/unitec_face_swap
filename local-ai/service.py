@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from api_auth import APIAuth, APIAuthMiddleware
 api_auth=APIAuth(os.getenv('ANOTHERFACE_AI_TOKEN','').strip(),os.getenv('ANOTHERFACE_REQUIRE_AUTH')=='1')
 from engine import FaceEngine
+from background_inpaint import installed as background_installed, generate as generate_background
 
 engine = None
 busy = asyncio.Lock()
@@ -63,7 +64,7 @@ class FrameInput(ImageInput):
 
 @app.get('/healthz')
 async def health():
-    return {'ready':engine is not None,'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':10,'app_version':'1.11.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
+    return {'ready':engine is not None,'background_available':background_installed(os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))),'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':11,'app_version':'1.12.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
 
 async def execute(fn,*args):
     if engine is None: raise HTTPException(503,'El motor todavía se está cargando.')
@@ -87,6 +88,12 @@ async def frame(data:FrameInput):
     if data.client_protocol<5 or data.settings.transport!='patch':raise HTTPException(426,'Actualiza el código de Render, recarga la página y reinicia el motor de la PC con la entrega 1.10.')
     if engine is None: raise HTTPException(503,'Motor no disponible.')
     return await execute(engine.frame,data.reference_id,data.image,data.points,data.settings.model_dump())
+
+@app.post('/background')
+async def background(data:ImageInput):
+    folder=os.getenv('ANOTHERFACE_MODELS',str(Path(__file__).parent/'models'))
+    if not background_installed(folder):raise HTTPException(409,'Falta LaMa. Ejecuta instalar-relleno-ia.bat y reinicia el motor.')
+    return await execute(generate_background,folder,data.image,data.points,os.getenv('ANOTHERFACE_PROVIDER','auto'),int(os.getenv('ANOTHERFACE_GPU_DEVICE','0')),min(getattr(engine,'threads',2),4))
 
 if __name__=='__main__':
     import uvicorn

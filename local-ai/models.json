@@ -51,5 +51,15 @@
     "sha256": "c6683427edf3e0c3a86e61b1dea1e6dad56c557f5e711fec93966cfb34fd5f87",
     "optional": true,
     "group": "avatar"
+  },
+  {
+    "name": "lama_fp32.onnx",
+    "url": "https://huggingface.co/Carve/LaMa-ONNX/resolve/c3c0c9e468934d62e79c329e35d82dd09ff8c444/lama_fp32.onnx?download=true",
+    "sha256": "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6",
+    "bytes": 208044816,
+    "optional": true,
+    "group": "background",
+    "license": "Apache-2.0",
+    "source": "https://github.com/advimman/lama"
   }
 ]

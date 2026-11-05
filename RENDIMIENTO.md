@@ -1,91 +1,59 @@
-# Rendimiento actual · Another Face 1.11.0
+# Rendimiento · Another Face 1.12.0
 
-Avatar fotográfico procesa la referencia frontal y dos perfiles con seguimiento local y WebGL. Neuronal usa el motor instalado en la PC. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para instalar LivePortrait 512 y conocer los cambios de forma, sombras, ojos y captura.
+## Qué hace cada motor
 
-La entrega 1.10 envía una sola textura JPEG de calidad 95 por resultado, prepara el color una sola vez por imagen y aplica esperas crecientes cuando el motor está ocupado. Los controles geométricos adicionales de perfil también consumen recursos.
+Avatar fotográfico reproyecta las fotos con seguimiento local y WebGL. Neuronal utiliza LivePortrait 512, HyperSwap 256 o InSwapper 128 en la PC. LaMa prepara un fondo opcional una vez y libera su sesión al terminar; no se ejecuta durante cada dibujo. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para los cambios y la instalación.
 
-La cámara solicita 30 FPS, hasta 60 cuando es posible. Se eliminaron los límites anteriores de 20 detecciones/s y 8 composiciones/s. El seguimiento trabaja con entrada de 384 píxeles (256 en Fluido), sin esperar un fotograma adicional al terminar. La vista se adapta hasta 960 píxeles, 720 en móvil. Las texturas se reutilizan y la generación devuelve un recorte alineado; registrar su malla ya no bloquea otra generación. El modo fotográfico evita copiar la cámara completa para el generador.
+La cámara solicita 30 FPS, hasta 60 si están disponibles. El seguimiento trabaja con entrada de 384 píxeles (256 en Fluido), sin añadir una espera artificial después de cada detección. La vista utiliza hasta 960 píxeles, 720 en móvil. La malla filtra pose y forma; entre detecciones se aplica una predicción rígida breve. Estos pasos mejoran la continuidad del movimiento sin generar detalle neuronal nuevo.
 
-Los contadores siguen separados: Vista = composiciones, Seguimiento = detecciones nuevas e IA = resultados nuevos recibidos del motor. Avatar fotográfico no incrementa IA. Reproyectar una textura no crea un fotograma neuronal nuevo.
+Se mantiene una solicitud facial en vuelo, se descartan muestras antiguas y se respeta la espera del motor ocupado. El resultado se transporta como una textura JPEG de calidad 95 con registro facial. Se reutilizan texturas y buffers; el color se calcula desde una copia pequeña aproximadamente cuatro veces por segundo y su objetivo se suaviza. La segmentación de referencia se prepara al cargar cada foto. Se elimina la antigua ganancia global de luz y sus lecturas redundantes.
 
-En la comprobación actual de la página completa, con tres referencias, cámara simulada y gráficos por software, la vista rondó 27 FPS y el seguimiento entre 12–16 FPS. LivePortrait real produjo una salida de 512 en unos 14 segundos en CPU. Los contadores permanecen separados: 27 composiciones/s no son 27 caras nuevas/s. Se comprobó captura y guardado simulado, sin errores WebGL. No son mediciones de tu GPU ni una comparación controlada contra la versión anterior.
+LaMa comparte el bloqueo de inferencia: preparar un fondo pausa los envíos faciales hasta terminar. Después se reutilizan la imagen preparada y una máscara gráfica del contorno. Sin fondo preparado se conserva la reproyección anterior; con él se permiten cambios geométricos algo mayores sin dejar la silueta original visible.
 
-Para medir tu instalación, detén el worker y ejecuta `medir-ia-local.bat`, o `medir-ia-local.bat --avatar` para LivePortrait. El medidor descarta el calentamiento y utiliza tensores sintéticos. Mide solo el generador: excluye extracción de movimiento, seguimiento, compresión, red y dibujo. El presupuesto de 30 generaciones/s es aproximadamente 33,3 ms para todo el trabajo necesario, no solo el modelo.
+## Contadores y mediciones
 
-DirectML y CUDA conservan selección explícita y alternativa CPU. El arranque ejecuta una inferencia real antes de anunciar disponibilidad; el nombre del proveedor no asegura que cada operación corra en GPU. No se han medido proveedores GPU físicos en este entorno. Más hilos, más pasadas o un modelo mayor no garantizan más FPS.
+| Contador | Qué mide |
+| --- | --- |
+| Vista | Composiciones completadas por segundo. |
+| Seguimiento | Detecciones nuevas por segundo; no cuenta predicciones. |
+| Generación IA | Resultados nuevos recibidos del generador facial, incluido el recorrido de solicitud. |
 
-# Historial: Retrato 7 (anterior a 1.8)
+Avatar fotográfico no incrementa Generación IA. Reutilizar una textura o predecir una pose no cuenta como una generación. El video nativo puede refrescarse por separado de la textura facial.
 
-Los tamaños, límites y mediciones siguientes corresponden a la entrega antigua, principalmente InSwapper. No describen el rendimiento actual ni deben extrapolarse a LivePortrait o a tu PC.
+En las pruebas actuales de página completa con cámara simulada, gráficos por software y modelos reales en CPU, la vista rondó **10–28 FPS** y el seguimiento **6–14 FPS**. LivePortrait necesitó **14,9–16,5 segundos** de inferencia para una salida de 512; la primera solicitud observada, con preparación, tardó entre 18,5 y 21,1 segundos. La prueba aislada de LaMa tardó **15,2 segundos** para preparar un fondo de 512 × 600, procesado internamente a 512 con márgenes que conservan la proporción.
 
+No son medidas de la GPU del usuario ni una comparación controlada con la versión anterior. Se comprobaron los botones de ambos fondos, las tres referencias, los tonos, el registro, los píxeles de boca y contorno, la captura y el guardado simulado, sin errores WebGL. Las pruebas sintéticas de boca no sustituyen una secuencia original con la lengua en movimiento. No se han probado dispositivos móviles físicos ni CUDA/DirectML en una GPU física.
 
-## Cambios
+## Medir en tu PC
 
-La vista neuronal presenta el video nativo del navegador y una capa WebGL transparente para el rostro. Ya no reconstruye toda la cámara en un lienzo 2D ni copia el resultado WebGL a ese lienzo por fotograma. Esa composición completa se realiza al tomar una foto, con las coordenadas del rostro de esa captura.
+Detén el motor y ejecuta:
 
-La malla utiliza vértices compartidos e índices estáticos. Los datos dinámicos pasan de 102240 a 18840 bytes en la topología probada. Las texturas neuronales se actualizan cuando llega una respuesta nueva. La adaptación de luz compara la captura actual con la que originó el resultado y aplica una ganancia acotada; puede desactivarse en Acabado natural. Se conservan textura, mezcla de bordes y regiones de ojos y boca actuales.
+```powershell
+.\medir-ia-local.bat --avatar
+```
 
-Al terminar cada inferencia, el cliente considera la muestra más reciente disponible. Mantiene una solicitud neuronal en vuelo, descarta respuestas de otra referencia y evita procesar dos veces la misma muestra. El límite máximo de envío es de 30 por segundo, condicionado al motor y a las muestras nuevas; no es una promesa de 30 FPS neuronales.
+Para el modelo de intercambio seleccionado automáticamente, utiliza `.\medir-ia-local.bat`. El medidor se niega a cargar otra copia si el puerto está ocupado. Utiliza tensores sintéticos, descarta el calentamiento y mide solo una pasada del generador: excluye extracción de movimiento, seguimiento, compresión, red y dibujo. Para 30 generaciones por segundo, todo el recorrido necesita sostener aproximadamente 33,3 ms por resultado.
 
-Original presenta directamente la cámara y detiene las inferencias faciales innecesarias. El retrato ligero conserva transferencia de apariencia, cabello y composición.
+El arranque ejecuta una inferencia de calentamiento y muestra el proveedor realmente inicializado. Algunas operaciones pueden caer en CPU aunque la sesión anuncie GPU. LivePortrait tiene una carga muy distinta de InSwapper; más hilos o más pasadas no garantizan más FPS.
 
-## Perfil Fluido
+## Proveedor e hilos
 
-En modo neuronal utiliza una composición de 480 píxeles y seguimiento de hasta 320 píxeles de ancho. Omite el refinamiento adicional del iris y conserva ojos, labios, expresión y contorno. La alineación neuronal utiliza los centros de los ojos estimados por la malla. Natural y Más parecido mantienen el seguimiento refinado y hasta 480 píxeles de entrada al seguimiento.
+El instalador normal utiliza DirectML. `optimizar-ia-local.bat --cuda` prepara explícitamente ONNX Runtime GPU y bibliotecas NVIDIA; `--cpu` prepara CPU. Detén el motor antes de cambiar el runtime. LaMa reutiliza el instalado.
 
-Este perfil prioriza respuesta en equipos con pocos recursos; los movimientos finos de los ojos pueden ser menos precisos. Mantiene los mismos pesos neuronales y su frecuencia de generación sigue dependiendo de InSwapper.
-
-## Proveedores y configuración
-
-El modo automático considera CUDA si está instalado, después DirectML si está disponible y finalmente CPU. Comprueba los proveedores realmente inicializados para evitar mostrar CUDA cuando ONNX terminó utilizando CPU. ArcFace se ejecuta una vez por referencia y permanece en CPU para reservar la GPU al intercambio.
-
-El instalador normal conserva DirectML; `--cuda` instala explícitamente ONNX Runtime GPU 1.21.1 y sus bibliotecas NVIDIA, utilizando la función oficial de precarga en Windows. No se descargan esas bibliotecas por defecto. `--cpu` selecciona la variante CPU.
-
-Variables avanzadas, antes de iniciar en PowerShell:
+Configuración opcional antes de arrancar:
 
 ```powershell
 $env:ANOTHERFACE_PROVIDER="auto"
 $env:ANOTHERFACE_GPU_DEVICE="0"
 $env:ANOTHERFACE_THREADS="4"
-npm.cmd run start:ai
+npm.cmd run start:worker
 ```
 
-`ANOTHERFACE_PROVIDER` admite auto, cuda, dml y cpu. El índice GPU se pasa al proveedor; en DirectML corresponde a la enumeración DXGI. No se identifica automáticamente la GPU más rápida. Los hilos CPU se limitan a 1–8 y el valor automático conserva recursos para el navegador. Más hilos no garantizan más FPS.
+Proveedor admite auto, cuda, dml y cpu; hilos, de 1 a 8. LaMa limita su preparación a cuatro hilos. El índice de GPU se pasa al proveedor; no se descubre automáticamente la más rápida. Un número mayor de hilos puede competir con el navegador.
 
-## Indicadores
-
-| Indicador | Medición |
-| --- | --- |
-| Vista | Composiciones completadas por segundo. El video nativo puede refrescarse independientemente de la textura facial. |
-| Generación IA | Resultados neuronales nuevos recibidos por segundo, incluido el recorrido de la solicitud. |
-| Seguimiento | Resultados de seguimiento completados por segundo; las predicciones no cuentan como detecciones nuevas. |
-
-Se muestra un guion mientras faltan muestras. No se multiplica el contador neuronal por los fotogramas de cámara o por la reproyección.
-
-## Validación
-
-Se utiliza Chromium con gráficos por software y cámara simulada, ejecutando realmente ArcFace e InSwapper en ONNX Runtime CPU. Se comprueban referencia propia, captura con malla, comparación, cambio entre motores, pérdida y recuperación del rostro, perfil Fluido, alternativa al fallar el Worker y apagado sin nuevos envíos. Se inspeccionan escritorio y presentación a 390 píxeles; no equivale a una prueba en un teléfono físico.
-
-Una prueba de color del renderizador comprueba espejo, adaptación de luz acotada y retirada del rostro al perder seguimiento. La comparación de las entregas 6 y 7 usa los mismos modelos y tamaño de composición. El tiempo de composición se mide con cinco iteraciones de calentamiento y 60 muestras sincronizadas mediante WebGL, manteniendo fija la muestra facial; no equivale a FPS de una videollamada. Las mediciones concretas se añaden al final de este documento.
-
-CUDA y DirectML no se probaron en una GPU física. El modelo conserva su entrada de 128 píxeles: ampliar la vista no genera detalle nuevo. Poca luz, oclusiones o giros grandes pueden causar artefactos; se atenúa el efecto ante una pose incompatible. No hay garantía de una frecuencia fija ni de precisión biométrica.
-
-## Fuentes técnicas
+## Fuentes
 
 - https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html
 - https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html
 - https://onnxruntime.ai/docs/performance/tune-performance/threading.html
-
-
-## Mediciones de esta entrega
-
-| Prueba, mismo entorno de CPU y Chromium por software | Entrega 6 | Entrega 7 |
-| --- | ---: | ---: |
-| Preparación y composición, mediana de 60 muestras sincronizadas | 0,8 ms | 0,3 ms |
-| Datos dinámicos de vértices por composición | 102240 bytes | 18840 bytes |
-| Copias de cámara a lienzo 2D durante una muestra de unos 8 segundos | 161 | 20 |
-| Copias de la capa WebGL a 2D durante la vista de entrega 7 | — | 0 |
-
-El contador de copias de cámara de la entrega 7 corresponde al seguimiento; no se reconstruye el fondo por cada fotograma. Las medidas dependen del entorno, y la prueba de composición mantiene fija la muestra facial. No deben convertirse en una predicción de FPS en tu PC.
-
-En una comprobación adicional, el seguimiento de Natural rondó 2,4 FPS y el perfil Fluido alcanzó aproximadamente 4,5 FPS. La vista osciló durante las ejecuciones; no se observó un aumento constante de todos los contadores. La IA por CPU permaneció alrededor de 0,3 resultados por segundo en este entorno. El perfil más rápido mejora la respuesta geométrica sin generar más detalle facial. Para elevar sustancialmente la generación neuronal, el rendimiento del proveedor GPU es determinante y no se ha medido aquí en hardware físico.
+- https://huggingface.co/Carve/LaMa-ONNX
