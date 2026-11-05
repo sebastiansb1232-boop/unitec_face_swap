@@ -26,7 +26,7 @@
         uniform sampler2D photoA;uniform sampler2D photoB;uniform sampler2D camera;
         uniform float transition;uniform float intensity;uniform float onlyLive;uniform float cameraMirror;
         uniform float light;uniform float feather;uniform float matteA;uniform float matteB;uniform float baselineLuma;
-        uniform vec2 probeA;uniform vec2 probeB;uniform vec2 probeC;uniform vec4 eyeA;uniform vec4 eyeB;uniform vec2 eyeAssist;
+        uniform vec3 complexion;uniform vec2 probeA;uniform vec2 probeB;uniform vec2 probeC;uniform vec4 eyeA;uniform vec4 eyeB;uniform vec2 eyeAssist;
         varying vec2 a;varying vec2 b;varying vec2 c;varying float border;varying float own;varying float cover;
         vec2 cameraUV(vec2 p){return vec2(mix(p.x,1.-p.x,cameraMirror),p.y);}
         float eyeMask(vec4 e){return 1.-smoothstep(.65,1.15,length((c-e.xy)/max(e.zw,vec2(.00001))));}
@@ -44,6 +44,12 @@
           // Ganancia global: la sombra de la nariz original no se imprime sobre la nueva.
           float gain=clamp((currentLuma+.08)/(baselineLuma+.08),.90,1.10);
           generated=clamp(generated*mix(1.,gain,light),0.,1.);
+          // Corrección uniforme y acotada: conserva poros y gradientes.
+          float skinWeight=1.-.8*max(eyeMask(eyeA),eyeMask(eyeB));
+          float Y=dot(generated,weights)+complexion.x*skinWeight;
+          float U=dot(generated,vec3(-.168736,-.331264,.5))+complexion.y*skinWeight;
+          float V=dot(generated,vec3(.5,-.418688,-.081312))+complexion.z*skinWeight;
+          generated=clamp(vec3(Y+1.402*V,Y-.344136*U-.714136*V,Y+1.772*U),0.,1.);
           float alpha=layer.a*intensity;
           vec3 color=mix(generated,original,own);
           gl_FragColor=vec4(color*alpha,alpha);
@@ -52,7 +58,7 @@
       gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer=gl.createBuffer());
       this.data=new Float32Array((471+468)*12);gl.bufferData(gl.ARRAY_BUFFER,this.data.byteLength,gl.DYNAMIC_DRAW);
       [['pos',3,0],['sourceA',2,12],['sourceB',2,20],['live',2,28],['edge',1,36],['native',1,40],['erase',1,44]].forEach(([name,size,offset])=>{const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,48,offset);});
-      this.uniforms=Object.fromEntries(['transition','intensity','onlyLive','cameraMirror','light','feather','matteA','matteB','baselineLuma','probeA','probeB','probeC','eyeA','eyeB','eyeAssist'].map(n=>[n,gl.getUniformLocation(program,n)]));
+      this.uniforms=Object.fromEntries(['transition','intensity','onlyLive','cameraMirror','light','feather','matteA','matteB','baselineLuma','probeA','probeB','probeC','eyeA','eyeB','eyeAssist','complexion'].map(n=>[n,gl.getUniformLocation(program,n)]));
       ['photoA','photoB','camera'].forEach((n,i)=>gl.uniform1i(gl.getUniformLocation(program,n),i));
       this.textureSizes=[];this.textures=Array.from({length:3},(_,i)=>{gl.activeTexture(gl.TEXTURE0+i);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);for(const p of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,p,gl.LINEAR);for(const p of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,p,gl.CLAMP_TO_EDGE);return t;});
       gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
@@ -64,7 +70,7 @@
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indices=gl.createBuffer());gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);this.reset();
     }
     hide(){this.canvas.hidden=true;this.latestPoints=null;}
-    reset(){this.key=null;this.previous=null;this.changed=0;this.shape.reset();this.gaze=[{x:0,y:0},{x:0,y:0}];this.eyeBlend=[0,0];this.drawTime=null;this.boundaryStamp=null;this.eyeReference=null;this.hide();}
+    reset(){this.key=null;this.previous=null;this.changed=0;this.shape.reset();this.gaze=[{x:0,y:0},{x:0,y:0}];this.eyeBlend=[0,0];this.drawTime=null;this.boundaryStamp=null;this.eyeReference=null;this.toneFilter=root.PortraitBlend?new root.PortraitBlend.ToneFilter():null;this.toneStats=new WeakMap();this.toneSampleAt=-Infinity;this.liveTone=null;this.toneTargetReady=false;this.hide();}
     upload(unit,image){const gl=this.gl,w=image.videoWidth||image.naturalWidth||image.width,h=image.videoHeight||image.naturalHeight||image.height;gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,this.textures[unit]);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);if(this.textureSizes[unit]?.[0]===w&&this.textureSizes[unit]?.[1]===h)gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gl.RGBA,gl.UNSIGNED_BYTE,image);else{gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);this.textureSizes[unit]=[w,h];}}
     draw(ctx,frame,points,key,settings,now){
       if(!key?.uv||!points||this.lost||key.registrationRequired&&!key.registered){this.hide();return false;}
@@ -78,6 +84,17 @@
       if(this.canvas.width!==frame.width||this.canvas.height!==frame.height){this.canvas.width=frame.width;this.canvas.height=frame.height;}
       const eyeReference=key.generatedPoints&&key.referenceLayers?.length?key.referenceLayers.reduce((a,b)=>Math.abs(root.FacePose.basis(a.points,a.width).yaw-yaw)<Math.abs(root.FacePose.basis(b.points,b.width).yaw-yaw)?a:b):null;
       if(key!==this.key||eyeReference!==this.eyeReference){this.duration=eyeReference?0:Q.textureTransition(this.key,key);this.previous=this.duration?this.key:key;this.key=key;this.changed=now;this.eyeReference=eyeReference;this.referenceUV=eyeReference?.points.map(p=>({x:p.x/eyeReference.image.width,y:p.y/eyeReference.image.height}));this.upload(0,eyeReference?.image||this.previous.layer||this.previous.image);this.upload(1,key.layer||key.image);}
+      if(root.ReferenceTone&&root.PortraitBlend&&settings.integrate!==false){
+        if(!this.toneStats.has(key)){const im=key.image,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;this.toneStats.set(key,root.ReferenceTone.sample(im,key.uv.map(p=>({x:p.x*w,y:p.y*h}))));}
+        if(now-this.toneSampleAt>220){
+          this.toneSampleAt=now;const c=this.toneCanvas||(this.toneCanvas=document.createElement('canvas'));c.width=160;c.height=Math.max(1,Math.round(160*frame.height/frame.width));const x=c.getContext('2d',{willReadFrequently:true});
+          if(frame.video&&frame.mirror){x.translate(c.width,0);x.scale(-1,1);}x.drawImage(frame.video||frame,0,0,c.width,c.height);
+          this.liveTone=root.ReferenceTone.sample(c,points.map(p=>({x:p.x*c.width/frame.width,y:p.y*c.height/frame.height})));
+        }
+        const source=this.toneStats.get(key);
+        if(this.liveTone&&!this.toneTargetReady){this.toneFilter.value=this.liveTone.mean.slice();this.toneTargetReady=true;}
+        const target=this.liveTone?{mean:this.toneFilter.update(this.liveTone.mean,now)}:null,t=root.PortraitBlend.tone(source,target);gl.uniform3f(this.uniforms.complexion,...t);
+      }else gl.uniform3f(this.uniforms.complexion,0,0,0);
       const elapsed=this.drawTime===null?33:Math.max(1,Math.min(now-this.drawTime,100));this.drawTime=now;
       const liveExpression=Q.expression(points),nativeExpression=key.generatedPoints?Q.expression(key.generatedPoints):liveExpression;
       for(let k=0;k<2;k++){const desired=eyeReference?Q.smooth(.05,.14,liveExpression[k]-nativeExpression[k]):0;this.eyeBlend[k]+=(desired-this.eyeBlend[k])*(1-Math.exp(-elapsed/65));}
@@ -88,7 +105,7 @@
       gl.uniform1f(this.uniforms.transition,transition);gl.uniform1f(this.uniforms.intensity,(settings.opacity??1)*visibility);
       gl.uniform1f(this.uniforms.cameraMirror,frame.video&&frame.mirror?1:0);gl.uniform1f(this.uniforms.light,key.lightLuma>0?(settings.light??.5):0);
       gl.uniform1f(this.uniforms.baselineLuma,(this.previous.lightLuma||key.lightLuma||.4)*(1-transition)+(key.lightLuma||.4)*transition);
-      gl.uniform1f(this.uniforms.feather,.012+(settings.softness??.5)*.035);gl.uniform1f(this.uniforms.matteA,this.previous.layer&&!this.previous.rectangularLayer?1:0);gl.uniform1f(this.uniforms.matteB,key.layer&&!key.rectangularLayer?1:0);
+      gl.uniform1f(this.uniforms.feather,.035+(settings.softness??.5)*.08);gl.uniform1f(this.uniforms.matteA,this.previous.layer&&!this.previous.rectangularLayer?1:0);gl.uniform1f(this.uniforms.matteB,key.layer&&!key.rectangularLayer?1:0);
       [50,280,151].forEach((id,k)=>gl.uniform2f(this.uniforms[['probeA','probeB','probeC'][k]],points[id].x/frame.width,points[id].y/frame.height));
       const registeredUV=k=>{if(!k.registrationFromUV)return k.uv;const t=clamp((now-k.registrationStarted)/80,0,1);if(t>=1){k.registrationFromUV=null;return k.uv;}return k.uv.map((p,i)=>({x:k.registrationFromUV[i].x+(p.x-k.registrationFromUV[i].x)*t,y:k.registrationFromUV[i].y+(p.y-k.registrationFromUV[i].y)*t}));};
       const amounts=Q.featureAmounts(points,settings),uvA=this.referenceUV||registeredUV(this.previous),uvB=registeredUV(key),data=this.data;
@@ -96,7 +113,7 @@
       const stamp=points.stamp??now;if(this.boundaryStamp!==stamp){this.boundaryStamp=stamp;this.boundaryIds=Q.silhouetteIds(points);this.edgeValues=Q.silhouetteEdges(destination,Q.silhouetteIds(destination),pose3D?.scale||basis.scale);}
       const edges=key.layer&&this.previous.layer&&!key.rectangularLayer&&!this.previous.rectangularLayer?null:this.edgeValues;
       const oralOpening=liveExpression[2],sourceOpening=key.sourcePoints?Q.expression(key.sourcePoints)[2]:oralOpening;
-      const liveOral=settings.identityLock&&Math.abs(yaw)<.65&&oralOpening>.10&&(key.referencePhoto||Math.abs(oralOpening-sourceOpening)>.10),oralIds=new Set(HOLES[2]);
+      const liveOral=settings.identityLock&&(root.PortraitBlend?root.PortraitBlend.oralMix(yaw,oralOpening,sourceOpening,key.referencePhoto):Math.abs(yaw)<1.22&&oralOpening>.075&&(key.referencePhoto||Math.abs(oralOpening-sourceOpening)>.09)),oralIds=new Set([...HOLES[2],...root.FaceAppearance.LIPS]);
       for(let i=0;i<468;i++)vertex(i,destination[i],points[i],edges?edges[i]:1,Math.max(liveOral&&oralIds.has(i)?.99:0,...this.regions[i].map((weight,k)=>weight*amounts[k])));
       const center=(ids,mesh)=>ids.reduce((p,i)=>({x:p.x+mesh[i].x/ids.length,y:p.y+mesh[i].y/ids.length,z:p.z+(mesh[i].z||0)/ids.length}),{x:0,y:0,z:0});
       HOLES.forEach((ids,k)=>{
@@ -113,10 +130,10 @@
       });
       const skirt=Q.silhouetteSkirt(points,destination,frame.width,this.boundaryIds),signature=this.boundaryIds.join(',');skirt.forEach((p,i)=>vertex(471+i,p.destination,p.source,0,1,false,{x:0,y:0},{x:0,y:0},0));
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.skirtBuffer);if(signature!==this.skirtSignature){const indices=this.baseIndices.slice();skirt.forEach((p,i)=>{const j=(i+1)%skirt.length;indices.push(p.id,skirt[j].id,471+i,skirt[j].id,471+j,471+i);});this.backgroundCount=indices.length;gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.DYNAMIC_DRAW);this.skirtSignature=signature;}
-      gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,data);
+      gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferSubData(gl.ARRAY_BUFFER,0,data.subarray(0,(471+skirt.length)*12));
       // Recoloca la captura bajo el nuevo mentón y borra el contorno anterior.
       // El anillo exterior permanece fijo y se funde con el video sin rellenado de IA.
-      gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.uniform1f(this.uniforms.onlyLive,2);gl.drawElements(gl.TRIANGLES,this.backgroundCount,gl.UNSIGNED_SHORT,0);
+      gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.uniform1f(this.uniforms.onlyLive,2);gl.drawElements(gl.TRIANGLES,this.backgroundCount-this.baseIndices.length,gl.UNSIGNED_SHORT,this.baseIndices.length*2);
       gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,this.indices);gl.uniform1f(this.uniforms.onlyLive,0);gl.drawElements(gl.TRIANGLES,this.meshCount,gl.UNSIGNED_SHORT,0);
       let offset=this.meshCount;const eyeWidth=k=>{const [a,b]=k?[263,362]:[33,133];return Math.hypot(points[a].x-points[b].x,points[a].y-points[b].y);};

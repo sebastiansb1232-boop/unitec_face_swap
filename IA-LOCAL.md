@@ -1,4 +1,4 @@
-# IA local en Another Face 1.10.0
+# IA local en Another Face 1.11.0
 
 Esta entrega refina el tono entre fotos, los gestos neuronales y el contorno de perfil. Conserva **Avatar fotográfico en el navegador**, tres referencias y **LivePortrait opcional con salida de 512 píxeles**. HyperSwap e InSwapper siguen disponibles. El protocolo 5 exige actualizar tanto Render como la PC: las texturas se muestran solo tras verificar su registro facial. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para las diferencias, los límites y la actualización de PC y Render.
 
@@ -115,6 +115,6 @@ npm.cmd test
 .\.venv-ai\Scripts\python.exe -m unittest discover -s local-ai -p "test_*.py" -v
 ```
 
-La entrega pasa 83 pruebas JavaScript y 34 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
+La entrega pasa 88 pruebas JavaScript y 34 Python. Los ensayos completos de navegador utilizaron cámara simulada, modelos reales en CPU y Supabase simulado. No verifican tu GPU, tus credenciales ni un despliegue público.
 
 Los pesos se descargan explícitamente con revisión, tamaño y SHA-256 en `local-ai/models.json`; no se incluyen en el ZIP. ArcFace/InSwapper son de investigación no comercial; HyperSwap indica ResearchRAIL-MS. El código original LivePortrait es MIT, con condiciones separadas para componentes de terceros. Consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

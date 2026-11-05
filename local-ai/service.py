@@ -63,7 +63,7 @@ class FrameInput(ImageInput):
 
 @app.get('/healthz')
 async def health():
-    return {'ready':engine is not None,'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':9,'app_version':'1.10.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
+    return {'ready':engine is not None,'provider':engine.provider if engine else None,'model':getattr(engine,'model_name','inswapper_128_fp16'),'native_size':getattr(engine,'native_size',128),'version':10,'app_version':'1.11.0','render_protocol':5,'reference_views':3,'patch_output':True,'auth_required':bool(api_auth.token),'threads':engine.threads if engine else None,'device':engine.device if engine else None,'acceleration_warning':engine.acceleration_warning if engine else None}
 
 async def execute(fn,*args):
     if engine is None: raise HTTPException(503,'El motor todavía se está cargando.')

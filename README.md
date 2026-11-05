@@ -1,4 +1,6 @@
-> **Another Face 1.10.0 · Color coherente y gestos refinados.** Matiz unificado entre referencias, geometría neuronal relativa, ojos más suaves, contorno de perfil y transporte de una sola textura. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render; subir solo la URL del túnel no actualiza la página.
+> **1.11:** integración gradual con el tono de cámara, labios asistidos también de perfil y composición con menos trabajo gráfico. Consulta MEJORAS-RETRATO.md.
+
+> **Another Face 1.11.0 · Color coherente y gestos refinados.** Matiz unificado entre referencias, geometría neuronal relativa, ojos más suaves, contorno de perfil y transporte de una sola textura. Lee [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar PC y Render; subir solo la URL del túnel no actualiza la página.
 
 # Another Face
 
@@ -59,7 +61,7 @@ Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y vario
 
 Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`. Para el motor neuronal: `npm run start:ai`, después de la instalación descrita en IA-LOCAL.md.
 
-Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega pasa 83 pruebas JavaScript y 34 Python, incluidas las de tres vistas, giro, profundidad, LivePortrait, clave privada y resultados atrasados. Las pruebas de navegador ejecutaron Avatar fotográfico y los generadores reales HyperSwap y LivePortrait en CPU, con captura y guardado simulado. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
+Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Esta entrega pasa 88 pruebas JavaScript y 34 Python, incluidas las de tres vistas, giro, profundidad, LivePortrait, clave privada y resultados atrasados. Las pruebas de navegador ejecutaron Avatar fotográfico y los generadores reales HyperSwap y LivePortrait en CPU, con captura y guardado simulado. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
 
 Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
 - Permitir y denegar cámara; encender, apagar y cambiar cámara.

@@ -1,3 +1,27 @@
+# Another Face 1.11.0 · Integración con la cámara y labios de perfil
+
+## Cambios actuales
+
+- Las referencias conservan su corrección entre vistas y ahora se integran con el color de la cámara. Se muestrea una copia de 160 píxeles aproximadamente cuatro veces por segundo, con corrección de espejo. La luz objetivo se suaviza en el tiempo; al cambiar de foto se recalcula la corrección desde esa foto, para evitar aplicar durante unos instantes la corrección de la anterior.
+- La adaptación de luminancia y matiz es acotada y uniforme; conserva textura sin aplicar desenfoque a la piel. La región de los ojos recibe una corrección menor. El borde facial utiliza una transición más amplia para reducir el corte de frente y mandíbula.
+- La asistencia oral incluye labios e interior también en perfiles de hasta aproximadamente 70 grados. Avatar fotográfico adapta su apertura a la boca actual; el generador neuronal conserva su boca cuando ya coincide. Se evita estirar los labios cerrados de una foto sobre una boca abierta.
+- Se envían a WebGL solo los vértices usados. La reposición del contorno dibuja únicamente el anillo exterior, evitando repintar toda la superficie facial en una pasada adicional.
+- Continúa LivePortrait de 512 píxeles nativos; esta entrega reutiliza los modelos instalados. Los cambios corrigen la composición y no convierten una referencia borrosa en detalle HD ni añaden entrenamiento a los pesos.
+
+En las capturas nuevas está seleccionado Avatar fotográfico en una de las vistas. Ese modo anima fotos localmente; para generar una imagen con LivePortrait selecciona Neuronal e inicia `iniciar-avatar-ia.bat`. Se corrigen ambos caminos de composición.
+
+## Actualizar desde 1.10
+
+Copia el código en la misma carpeta Another-Face conservando `.env`, `.env.ai`, `.venv-ai` y `local-ai/models`. Ejecuta `npm.cmd ci`, reinicia el worker con `iniciar-avatar-ia.bat` y actualiza main y Render. Mantén el túnel abierto para reutilizar su URL. Si creas otro, actualiza `ANOTHERFACE_AI_URL`. La cabecera y el motor deben indicar 1.11.0; los archivos del cliente usan caché v14. No hace falta repetir el instalador si LivePortrait ya está completo.
+
+## Verificación de esta entrega
+
+Pasan **88 pruebas JavaScript y 34 Python**. La página completa se comprobó con Avatar fotográfico y LivePortrait real en CPU, con captura guardada en un servidor simulado, sin errores de JavaScript ni WebGL. La vista osciló entre 26–29 FPS en esos ensayos; una generación LivePortrait tardó unos 13 segundos en CPU. No es una comparación controlada con la versión anterior ni una medida de tu GPU. Las pruebas incluyen adaptación temporal de tono, cambio entre referencias con distinta exposición, asistencia oral lateral y apertura de boca en perfil. Se realizan comprobaciones de píxeles, WebGL y captura con cámara simulada. Las capturas aportadas muestran el resultado filtrado; no sustituyen el video original para evaluar todos los gestos. La frecuencia neuronal depende del hardware; el contador de vista no es el de generaciones.
+
+---
+
+## Guía y comprobaciones de la entrega anterior (1.10)
+
 # Another Face 1.10.0 · Color coherente y gestos más estables
 
 Esta entrega refina Neuronal, Avatar fotográfico y el tono del filtro ligero. Mantiene LivePortrait 512, HyperSwap e InSwapper y el puente protegido entre Render y tu PC. No añade modelos ni dependencias a la instalación existente.

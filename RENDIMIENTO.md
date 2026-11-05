@@ -1,4 +1,4 @@
-# Rendimiento actual · Another Face 1.10.0
+# Rendimiento actual · Another Face 1.11.0
 
 Avatar fotográfico procesa la referencia frontal y dos perfiles con seguimiento local y WebGL. Neuronal usa el motor instalado en la PC. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para instalar LivePortrait 512 y conocer los cambios de forma, sombras, ojos y captura.
 

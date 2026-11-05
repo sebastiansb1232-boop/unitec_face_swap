@@ -171,7 +171,7 @@
       }
       const span=p=>Math.max(Pose.length(Pose.sub(p[61],p[291])),.03),opening=p=>Math.abs(p[13].y-p[14].y)/span(p);
       const maxOpen=Math.abs(b.yaw)>.65?.20:.34,rawDelta=opening(local)-opening(base);
-      const mouthCenter={x:(reference[61].x+reference[291].x)/2,y:(reference[13].y+reference[14].y)/2},mouthDelta=Math.max(-opening(reference)*.9,maxOpen*Math.tanh(rawDelta/maxOpen)),smile=clamp(span(local)/span(base),.9,1.1),inner=new Set(HOLES[2]);
+      const mouthCenter={x:(reference[61].x+reference[291].x)/2,y:(reference[13].y+reference[14].y)/2},mouthDelta=key.referencePhoto?clamp(opening(local)-opening(reference),-opening(reference),1.05):Math.max(-opening(reference),maxOpen*Math.tanh(rawDelta/maxOpen)),smile=clamp(span(local)/span(base),.9,1.1),inner=new Set(HOLES[2]);
       for(const id of A.LIPS){
         desired[id].x=mouthCenter.x+(reference[id].x-mouthCenter.x)*smile;
         const direction=Math.sign(reference[id].y-mouthCenter.y);

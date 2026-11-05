@@ -1,0 +1,6 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),B=require('../public/portrait-blend');
+test('dos referencias con distinta exposición se acercan al mismo tono de cámara',()=>{const target={mean:[.6,.02,.04]},a={mean:[.85,-.01,.09]},b={mean:[.55,.04,.03]},first=B.tone(a,target),second=B.tone(b,target);for(let i=0;i<3;i++)assert.ok(Math.abs(a.mean[i]+first[i]-b.mean[i]-second[i])<.05);});
+test('la integración reduce el salto de color con límites de luz y matiz',()=>{const source={mean:[.8,-.02,.08]},target={mean:[.3,.01,.03]},t=B.tone(source,target);assert.ok(t[0]<0&&t[0]>=-.26);assert.ok(t[1]>0&&t[2]<0);assert.deepEqual(B.tone(null,target),[0,0,0]);});
+test('un cambio de foto o luz se acerca gradualmente al nuevo tono',()=>{const f=new B.ToneFilter(),a=f.update([.15,.05,-.05],0);assert.ok(a[0]>0&&a[0]<.03);let last=a;for(let i=1;i<50;i++){const n=f.update([.15,.05,-.05],i*33);assert.ok(n[0]>=last[0]&&n[0]<=.15);last=n;}const next=f.update([-.15,0,0],1700);assert.ok(Math.abs(next[0]-last[0])<.08);});
+test('la boca abierta tiene asistencia lateral sin sustituir una generación que ya coincide',()=>{assert.equal(B.oralMix(1,.6,.05,true),true);assert.equal(B.oralMix(-1,.6,.05,false),true);assert.equal(B.oralMix(.3,.2,.19,false),false);assert.equal(B.oralMix(1.5,.6,.05,true),false);assert.equal(B.oralMix(0,.01,0,true),false);});

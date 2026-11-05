@@ -9,6 +9,10 @@ function view(p,yaw=0,mirror=false){
  const c=Math.cos(yaw),s=Math.sin(yaw),width=600;
  return p.map(q=>({x:mirror?width-(300+150*(q.x*c+q.z*s)):300+150*(q.x*c+q.z*s),y:150+150*q.y,z:150*(-q.x*s+q.z*c)/width}));
 }
+test('la boca fotográfica abre de perfil y cierra sin conservar la abertura de la foto',()=>{
+ const reference=canonical(),opened=canonical();opened[13].y=.70;opened[14].y=1.04;
+ for(const yaw of [-.9,0,.9]){const neutral=view(reference,yaw),live=view(opened,yaw),key={width:600,referencePhoto:true,activeView:'front',sourcePoints:neutral,referenceViews:[{side:'front',points:neutral,width:600}],referenceId:'mouth-'+yaw},shape=new Q.IdentityShape();let out;for(let i=0;i<60;i++)out=shape.apply(live,key,1,i*33,[]);const local=P.normalize(out,600);assert.ok(local[14].y-local[13].y>.25,'mouth must open at '+yaw);}
+});
 test('la silueta incluye una nariz que sobresale y el anillo cubre su contorno anterior',()=>{
  const p=view(canonical(),.9);p[1].x=Math.min(...p.map(q=>q.x))-25;const ids=Q.silhouetteIds(p);assert.ok(ids.includes(1));const dest=p.map(q=>({...q}));dest[1].x+=15;const skirt=Q.silhouetteSkirt(p,dest,600,ids),nose=skirt.find(q=>q.id===1);assert.ok(nose.source.x<p[1].x);assert.deepEqual(nose.source,nose.destination);assert.ok(Q.silhouetteEdges(dest,Q.silhouetteIds(dest),150).every(Number.isFinite));
 });
