@@ -16,6 +16,14 @@ test('la estabilización reduce vibración de posición, escala y giro sin fijar
  assert.ok(filteredEnergy<rawEnergy*.55,'rigid frame must be filtered too');
  const moved=view(base,.35).map(q=>({...q,x:q.x+45}));for(let i=0;i<12;i++)out=s.filter(moved,600,.85,3000+i*33);assert.ok(Math.abs(P.basis(out,600).origin.x-P.basis(moved,600).origin.x)<3);assert.ok(Math.abs(P.basis(out,600).yaw-.35)<.02||Math.abs(P.basis(out,600).yaw+.35)<.02);
 });
+test('estabilidad al máximo no acumula más de 20 ms de giro sostenido en el filtro externo',()=>{
+ const s=new P.Stabilizer(),base=canonical(),rate=1.1;let maxLag=0;
+ for(let i=0;i<45;i++){const raw=view(base,i*.016*rate),out=s.filter(raw,600,1,i*16);if(i>4)maxLag=Math.max(maxLag,Math.abs(P.basis(raw,600).yaw-P.basis(out,600).yaw)/rate*1000);}
+ assert.ok(maxLag<20,'filter lag '+maxLag+' ms');
+});
+test('el presupuesto de movimiento vuelve a detalle al estabilizar el giro',()=>{
+ const {NeuralMotion}=require('../public/neural-motion'),m=new NeuralMotion();m.update(view(canonical(),0),0,600);m.update(view(canonical(),.2),100,600);assert.equal(m.isMoving(130),true);m.update(view(canonical(),.2),200,600);assert.equal(m.isMoving(500),false);m.reset();assert.equal(m.isMoving(130),false);
+});
 test('la boca fotográfica abre de perfil y cierra sin conservar la abertura de la foto',()=>{
  const reference=canonical(),opened=canonical();setMouth(opened,.70,1.04);
  for(const yaw of [-.9,0,.9]){const neutral=view(reference,yaw),live=view(opened,yaw),key={width:600,referencePhoto:true,activeView:'front',sourcePoints:neutral,referenceViews:[{side:'front',points:neutral,width:600}],referenceId:'mouth-'+yaw},shape=new Q.IdentityShape();let out;for(let i=0;i<60;i++)out=shape.apply(live,key,1,i*33,[]);const local=P.normalize(out,600);assert.ok(local[14].y-local[13].y>.25,'mouth must open at '+yaw);}
@@ -78,11 +86,13 @@ test('la geometría se reutiliza entre detecciones sin recalibrar y responde al 
  const back=shape.apply(front,key,1,2883,[]);assert.ok(back[152].y>settled[152].y);
 });
 
-test('cada perfil conserva su geometría propia sin imponerle los labios de la frontal',()=>{
+test('las fotos conservan una forma común al cambiar de perfil aunque tengan proporciones distintas',()=>{
  const frontal=canonical(),side=canonical();for(const id of A.LIPS)side[id].y+=.12;side[1].z-=.1;
  const live=view(side,-.9),key={width:600,sourcePoints:live,referencePhoto:true,activeView:'left',referenceViews:[{side:'front',points:view(frontal),width:600},{side:'left',points:live,width:600}],referenceId:'real-profile-shape'},shape=new Q.IdentityShape();
  let out;for(let i=0;i<40;i++)out=shape.apply(live,key,1,i*33,[]);
- out.forEach((p,i)=>assert.ok(Math.hypot(p.x-live[i].x,p.y-live[i].y)<(A.LIPS.includes(i)?.31:1e-5)));
+ const expected=P.fuseViews(key.referenceViews),local=P.normalize(out,600);
+ for(const id of [1,152,13,14])for(const axis of ['x','y','z'])assert.ok(Math.abs(local[id][axis]-expected[id][axis])<.005);
+ const frontalNose=P.normalize(view(frontal),600)[1].z,profileNose=P.normalize(live,600)[1].z;assert.ok(local[1].z<frontalNose&&local[1].z>profileNose);
 });
 test('los gestos cambian párpados y labios sin arrastrar la nariz con residuos de otros vértices',()=>{
  const p=canonical(),neutral=view(p),key={width:600,sourcePoints:neutral,referenceViews:[{side:'front',points:neutral,width:600}],referenceId:'expressions'},shape=new Q.IdentityShape();

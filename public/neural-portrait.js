@@ -31,7 +31,7 @@
       const views=reference.views||[{side:'front',image:reference.image,points:reference.points,width:reference.image.width}],identity=reference.uid||reference;
       if(identity!==this.photoIdentity||this.photoWidth!==width){this.photoCache.clear();this.photoIdentity=identity;this.photoWidth=width;this.photoSide=null;}
       const pose=root.FacePose.basis(points,width),cost=v=>Math.abs(root.FacePose.basis(v.points,v.width||v.image.width).yaw-pose.yaw);
-      let view=views.reduce((a,b)=>cost(a)<cost(b)?a:b);const previous=views.find(v=>v.side===this.photoSide);if(previous&&cost(previous)<=cost(view)+.12)view=previous;this.photoSide=view.side;
+      let view=views.reduce((a,b)=>cost(a)<cost(b)?a:b);const previous=views.find(v=>v.side===this.photoSide);if(previous&&cost(previous)<=cost(view)+.025)view=previous;this.photoSide=view.side;
       if(!this.photoCache.has(view.side)){
         const uv=view.points.map(p=>({x:p.x/view.image.width,y:p.y/view.image.height}));
         let lightLuma=0;try{const sample=document.createElement('canvas');sample.width=sample.height=32;const ctx=sample.getContext('2d');ctx.drawImage(view.image,0,0,32,32);lightLuma=[50,280,151].reduce((sum,id)=>{const p=view.points[id],pixel=ctx.getImageData(Math.max(0,Math.min(31,Math.round(p.x/view.image.width*31))),Math.max(0,Math.min(31,Math.round(p.y/view.image.height*31))),1,1).data;return sum+(.299*pixel[0]+.587*pixel[1]+.114*pixel[2])/765;},0);}catch{}
@@ -46,10 +46,11 @@
       if(!root.FacePose||!points)return this.last.registered?this.last:photo;
       const pose=root.FacePose.basis(points,width),expression=root.PortraitQuality.expression(points);let best=null,score=Infinity;
       for(const key of this.validCache.values()){
-        if(!key.registered||now-key.received>Math.max(1800,Math.min(10000,(this.last.requestMs||1000)*2.5)))continue;
+        const lifetime=/^(hyperswap|inswapper)/.test(key.model||'')?45000:Math.max(1800,Math.min(10000,(this.last.requestMs||1000)*2.5));
+        if(!key.registered||key.referenceId&&reference&&key.referenceId!==(reference.uid||reference)||now-key.received>lifetime)continue;
         const poseCost=Math.abs(pose.yaw-key.yaw)+Math.abs(pose.pitch-(key.pitch||0))*.5;
         const expressionCost=key.expression?expression.reduce((s,v,i)=>s+Math.abs(v-key.expression[i]),0)*.25:0;
-        const cost=poseCost+expressionCost+(now-key.received)/80000;
+        const cost=poseCost*4+expressionCost*.6+(now-key.received)/1500000;
         if(cost<score){best=key;score=cost;}
       }
       if(!best)return photo;
@@ -65,7 +66,7 @@
         if(this.neutralSamples<3){this.status('Calibrando el gesto neutral de la IA…');return false;}
       }
       const sourcePoints=points.map(p=>({...p})),inputPoints=options.mirror?points.map(p=>({...p,x:frame.width-p.x})):points;
-      const crop=root.neuralFaceCrop(inputPoints,frame.width,frame.height,this.faceSize);if(!crop)return false;
+      const limit=settings.quality==='detail'?this.faceSize:Math.min(this.faceSize,this.engineInfo?.native_size===256?448:320),crop=root.neuralFaceCrop(inputPoints,frame.width,frame.height,limit);if(!crop)return false;
       this.busy=true;const epoch=this.epoch,controller=this.abort=new AbortController(),timeout=setTimeout(()=>controller.abort(),settings.quality==='detail'?95000:45000);
       const canvas=document.createElement('canvas');canvas.width=crop.outputW;canvas.height=crop.outputH;canvas.getContext('2d').drawImage(frame,crop.x,crop.y,crop.width,crop.height,0,0,canvas.width,canvas.height);
       const snapshot=crop.points,raw=normalized?.map(p=>({...p})),pose=root.FacePose?root.FacePose.basis(sourcePoints,frame.width):{yaw:root.FaceAppearance.normalize(points)[1].x,pitch:0};
@@ -104,7 +105,7 @@
             // Volver a blanquear aquí para luego oscurecerlo perdía matices.
             if(key.model==='live_portrait_512'&&key.toneTarget&&key.toneSource){key.image=root.ReferenceTone.balance(image,key.generatedPoints,key.toneTarget,key.toneSource);key.layer=null;}
             const previous=this.validCache.get(bin);
-            if(!previous||previous.received<key.received){this.validCache.delete(bin);this.validCache.set(bin,key);while(this.validCache.size>9)this.validCache.delete(this.validCache.keys().next().value);}
+            if(!previous||previous.received<key.received){this.validCache.delete(bin);this.validCache.set(bin,key);while(this.validCache.size>11)this.validCache.delete(this.validCache.keys().next().value);}
           }).catch(()=>{});
           // Permite un resultado ya resuelto; nunca espera al Worker de registro.
           await Promise.resolve();

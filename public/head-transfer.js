@@ -39,7 +39,7 @@
       if(this.promise)return this.promise;
       this.promise=(async()=>{
         if(!root.Worker||!root.createImageBitmap)throw new Error('Este navegador no permite segmentar el cabello. El rostro sigue disponible.');
-        this.worker=new Worker('segmentation-worker.js?v=18');
+        this.worker=new Worker('segmentation-worker.js?v=19');
         this.worker.onmessage=({data})=>{const item=this.pending.get(data.id);if(!item)return;clearTimeout(item.timer);this.pending.delete(data.id);data.error?item.reject(new Error(data.error)):item.resolve(data);};
         this.worker.onerror=()=>{this.fail(new Error('No se pudo cargar la segmentación. Comprueba que copiaste las carpetas models y vendor.'));};
         await this.request(null);return this;
@@ -47,18 +47,18 @@
       return this.promise;
     }
     fail(error){for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(error);}this.pending.clear();this.worker?.terminate();this.worker=null;this.promise=null;}
-    request(bitmap){
+    request(bitmap,options={}){
       const id=++this.serial;
       return new Promise((resolve,reject)=>{
         const timer=setTimeout(()=>{this.fail(new Error('La segmentación tardó demasiado. Puedes continuar con el rostro.'));},45000);
         this.pending.set(id,{resolve,reject,timer});
-        try{this.worker.postMessage({id,bitmap},bitmap?[bitmap]:[]);}catch(error){clearTimeout(timer);this.pending.delete(id);bitmap?.close();reject(error);}
+        try{this.worker.postMessage({id,bitmap,purpose:options.purpose||'head'},bitmap?[bitmap]:[]);}catch(error){clearTimeout(timer);this.pending.delete(id);bitmap?.close();reject(error);}
       });
     }
-    async segment(image,max=640){
+    async segment(image,max=640,options={}){
       await this.ensure();const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height,scale=Math.min(1,max/Math.max(w,h));
       const bitmap=await createImageBitmap(image,{resizeWidth:Math.round(w*scale),resizeHeight:Math.round(h*scale),resizeQuality:'low'});
-      return this.request(bitmap);
+      return this.request(bitmap,options);
     }
   }
   class HairRenderer{

@@ -21,7 +21,7 @@
     }
     start(){
       if(this.ready)return this.ready;
-      this.worker=new Worker('tracking-worker.js?v=18');
+      this.worker=new Worker('tracking-worker.js?v=19');
       this.worker.onmessage=event=>{
         const item=this.pending.get(event.data.id);if(!item)return;
         this.pending.delete(event.data.id);clearTimeout(item.timer);
@@ -35,13 +35,14 @@
       try{
         await this.start();
         const w=source.videoWidth||source.naturalWidth||source.width,h=source.videoHeight||source.naturalHeight||source.height;
-        const region=this.role==='live'&&root.TrackingRegion?root.TrackingRegion.plan(this.lastPoints,w,h,options.inputSize||512,options.reset||!this.lastPoints||(this.frames||0)%12===0):null;
-        const changed=region&&this.lastRegion&&(region.cropped!==this.lastRegion.cropped||Math.abs(Math.log(region.width/this.lastRegion.width))>.18);this.lastRegion=region;
+        const region=this.role==='live'&&root.TrackingRegion?root.TrackingRegion.sequence(this.lastPoints,w,h,options.inputSize||512,this.lastRegion,options.reset===true):null;
+        const changed=region&&this.lastRegion&&!root.TrackingRegion.same(region,this.lastRegion);this.lastRegion=region;
         const image=region?await createImageBitmap(source,region.x,region.y,region.width,region.height,{resizeWidth:region.outputW,resizeHeight:region.outputH,resizeQuality:'high'}):await createImageBitmap(source);
-        try{const result=await this.request('frame',{image,refine:options.refine!==false,reset:options.reset===true||!!changed,timestamp:options.timestamp??root.performance?.now?.()??Date.now()},[image]);
+        try{const result=await this.request('frame',{image,refine:options.refine!==false,still:options.still===true,reset:options.reset===true||!!changed,timestamp:options.timestamp??root.performance?.now?.()??Date.now()},[image]);
           if(region)result.landmarks=root.TrackingRegion.restore(result.landmarks,region);
+          if(region&&!root.TrackingRegion.usable(result.landmarks,w,h))result.landmarks=null;
           this.frames=(this.frames||0)+1;this.lastPoints=result.landmarks?.length>=468?result.landmarks:null;
-          result.tracking={detected:result.landmarks?.length||0,cropped:!!region?.cropped,inputW:image.width,inputH:image.height};return result;
+          result.tracking={detected:result.landmarks?.length||0,cropped:!!region?.cropped,inputW:image.width,inputH:image.height,reframed:!!changed,ms:result.ms};return result;
         }
         finally{image.close();}
       }catch(error){

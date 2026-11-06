@@ -1,6 +1,6 @@
-# IA local en Another Face 1.15.0
+# IA local en Another Face 1.16.0
 
-Intercambio neuronal modifica la cámara con HyperSwap 256 o InSwapper 128. Esta entrega conserva iluminación natural, limita el cambio de exposición del cuerpo, mejora la entrada de seguimiento con ROI y añade superficie curva y compensación local de ojos/boca. No añade pesos. LivePortrait sigue siendo una opción fotográfica explícita. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar tu instalación y Render.
+Intercambio neuronal conserva HyperSwap 256 o InSwapper 128. Esta entrega añade seguimiento VIDEO en un recorte estable, proporciones calibradas, matiz común entre perfiles y prioridad de respuesta al girar. Reutiliza pesos y entorno. LivePortrait sigue como opción fotográfica explícita. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
 
 ## Primera instalación en Windows
 
@@ -78,7 +78,7 @@ El proveedor admite auto, cuda, dml y cpu; los hilos, de 1 a 8. No se detecta au
 
 ## Flujo de procesamiento
 
-1. La foto frontal y hasta dos perfiles se analizan en el navegador. La cámara utiliza Face Landmarker en un Worker sobre recortes en modo IMAGE; la estabilización y predicción temporal se mantienen aparte. El registro de imágenes también usa IMAGE.
+1. La foto frontal y hasta dos perfiles se analizan en el navegador. La cámara utiliza Face Landmarker en un Worker, con VIDEO dentro de un recorte estable y reinicio al reencuadrar. La estabilización externa acota su desfase. La captura y el registro de imágenes usan IMAGE independiente.
 2. Avatar rápido selecciona la fotografía adecuada y la reproyecta mediante geometría facial de profundidad estimada. No llama al generador ni transmite video a la PC.
 3. En Neuronal, el cliente envía un recorte sin espejo y los puntos de ese mismo fotograma. ArcFace combina las referencias una vez. LivePortrait precalcula además las características de apariencia por vista.
 4. El motor devuelve una textura alineada y la transformación. El navegador registra su malla en paralelo, ajusta las proporciones y la proyecta sobre el seguimiento actual. El rostro sigue la cámara entre respuestas y la compensación local actualiza diferencias de ojos y boca, sin contarlas como generaciones nuevas.

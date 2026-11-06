@@ -10,6 +10,7 @@ let currentFilter = 'retrato', points = null, rawPoints = null, lastFrame = 0, p
 let comparing = false, analyzingReference=false, inference=null, handleResultsCallback=null, backgroundBusy=false,capturePreparing=false,engineBusy=false,backgroundRequest=null;
 let portraitEngine='neural',cameraDevice='',resolutionLimit=0;
 let neuralView=null,trackingStarted=0,lastTrackStarted=0,lastTrackVideoTime=-1,lastMetricUpdate=0,lastNeuralDraw=0,trackerMs=0,neuralMessage='',neuralSample=null,lastSubmittedSample=null;
+const cameraSceneTone=new PortraitBlend.SceneTone();
 const neuralMotion=new NeuralMotion(),neuralTracker=new NeuralTracker(),outputTracker=new NeuralTracker('image'),liveStabilizer=new FacePose.Stabilizer(),referenceViews=new ReferenceViews(),viewTimes=[],trackTimes=[];
 let outputTrackingBusy=false,faceLostAt=0,faceLossReset=false;
 let neuralFrame=document.createElement('canvas'),neuralCapture=document.createElement('canvas');
@@ -35,7 +36,7 @@ const distance = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
 let triangles = [], sendGeneration = 0;
 function setStatus(text) { $('#studio-status').textContent = text; }
 function clearPortraitBackground(){neuralView?.clearBackground();$('#portrait-background-status').textContent='Sin fondo preparado. Se conserva el contorno original para evitar recortes.';}
-function clearTracking() { referenceFace.lost();liveStabilizer.reset();neuralTracker.reset();neuralPortrait.reset(true);neuralMotion.reset();neuralView?.reset();neuralSample=null;lastSubmittedSample=null;neuralCaptureReady=false;lastTrackVideoTime=-1;viewTimes.length=0;trackTimes.length=0; points = null; rawPoints = null; lastFrame = 0; ctx.clearRect(0,0,overlay.width,overlay.height);updateNeuralStatus(); }
+function clearTracking() { cameraSceneTone.reset();referenceFace.lost();liveStabilizer.reset();neuralTracker.reset();neuralPortrait.reset(true);neuralMotion.reset();neuralView?.reset();neuralSample=null;lastSubmittedSample=null;neuralCaptureReady=false;lastTrackVideoTime=-1;viewTimes.length=0;trackTimes.length=0; points = null; rawPoints = null; lastFrame = 0; ctx.clearRect(0,0,overlay.width,overlay.height);updateNeuralStatus(); }
 function syncPresentation(){
   $('.video-wrap').classList.toggle('is-live',!!stream);
   $('.video-wrap').classList.toggle('native-camera',!!stream&&(currentFilter==='ninguno'||portraitEngine==='neural'&&currentFilter==='retrato'));
@@ -67,7 +68,7 @@ async function getModel() {
   if (model) return model;
   if (modelPromise) return modelPromise;
   modelPromise = (async () => {
-    if (!window.FaceMesh||!window.TrackingRegion||!window.FaceSurface) throw new Error('Faltan módulos de Another Face 1.15. Copia la carpeta public completa y recarga con Ctrl + F5.');
+    if (!window.FaceMesh||!window.TrackingRegion||!window.FaceSurface||!window.FaceProportions) throw new Error('Faltan módulos de Another Face 1.16. Copia la carpeta public completa y recarga con Ctrl + F5.');
     const mesh = new FaceMesh({ locateFile: f => 'vendor/face-mesh/' + f });
     mesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: .65, minTrackingConfidence: .7 });
     const handleResults = results => {
@@ -85,7 +86,7 @@ async function getModel() {
       if(portraitEngine==='neural'&&currentFilter==='retrato'){
         if(!points){neuralMotion.reset();neuralView?.reset();return;}
         const now=performance.now(),stable=points;
-        trackerMs=now-trackingStarted;neuralMotion.update(stable,trackingStarted||now,overlay.width,cameraPoints);
+        trackerMs=now-trackingStarted;neuralMotion.update(stable,trackingStarted||now,overlay.width,cameraPoints,now);
         if(!comparing&&!analyzingReference&&referenceFace.ready){
           if(neuralCaptureReady&&!neuralPortrait.photoOnly){
             [neuralFrame,neuralCapture]=[neuralCapture,neuralFrame];
@@ -244,7 +245,7 @@ function mirrorFrame(canvas,source){
   const W=overlay.width,H=overlay.height;if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
   const c=canvas.getContext('2d');c.save();c.clearRect(0,0,W,H);if(facing==='user'){c.translate(W,0);c.scale(-1,1);}c.drawImage(source,0,0,W,H);c.restore();
 }
-function neuralSettings(){return {strength:referenceFace.opacity,identity_strength:Number($('#reference-identity').value)/100,mouth:referenceFace.mouth,eyes:referenceFace.eyes,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,color:0,detail:Math.max(0,Math.min(.35,(referenceFace.detail-.6)*.55)),quality:$('#reference-quality').value};}
+function neuralSettings(){const moving=!capturePreparing&&$('#reference-auto-response').checked&&!neuralPortrait.allowPortrait&&neuralMotion.isMoving(performance.now());return {strength:referenceFace.opacity,identity_strength:Number($('#reference-identity').value)/100,mouth:referenceFace.mouth,eyes:referenceFace.eyes,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,color:0,detail:Math.max(0,Math.min(.35,(referenceFace.detail-.6)*.55)),quality:moving?'balanced':$('#reference-quality').value};}
 function submitNeural(){
   const sample=neuralSample;
   if(!stream||capturePreparing||comparing||analyzingReference||portraitEngine!=='neural'||currentFilter!=='retrato'||!sample||sample===lastSubmittedSample||sample.generation!==generation||performance.now()-sample.time>450)return;
@@ -254,6 +255,8 @@ function updateNeuralStatus(){
   const fps=viewTimes.length>1?(viewTimes.length-1)*1000/Math.max(viewTimes.at(-1)-viewTimes[0],1):0;
   const tracked=trackTimes.length>1?(trackTimes.length-1)*1000/Math.max(trackTimes.at(-1)-trackTimes[0],1):0,activeNeural=portraitEngine==='neural'&&currentFilter==='retrato';
   $('#neural-status').textContent=neuralMessage||'Modo ligero · Procesamiento en este dispositivo';
+  const age=neuralMotion.current?Math.max(0,performance.now()-neuralMotion.current.time):null;
+  $('#motion-latency').textContent=stream&&activeNeural&&age!==null?'Detección '+Math.round(trackerMs)+' ms · Malla '+Math.round(age)+' ms · Objetivo 50 ms':'La respuesta depende de cámara, seguimiento y composición; el objetivo es 50 ms.';
   const value=(id,n)=>{const e=$(id);if(e)e.textContent=n>0?n.toFixed(1):'—';};
   value('#fps-view',stream?fps:0);value('#fps-ai',stream&&activeNeural?neuralPortrait.fps:0);value('#fps-tracking',stream?tracked:0);
   if($('#engine-label'))$('#engine-label').textContent=currentFilter==='ninguno'?'Original':activeNeural&&neuralPortrait.photoOnly?'Avatar · Fotos 3D':activeNeural?({CUDAExecutionProvider:'GPU · CUDA',DmlExecutionProvider:'GPU · DirectML',CPUExecutionProvider:'CPU · ONNX'}[neuralPortrait.last?.provider||neuralPortrait.engineInfo?.provider]||'Motor neuronal'):'Modo ligero';
@@ -295,9 +298,13 @@ function drawFrame(source) {
   }
   if(!(currentFilter==='ninguno'||portraitEngine==='neural'&&currentFilter==='retrato'))recordView(performance.now());
 }
-function drawSkinTone(target,source,capture=false){
-  skinToneApplied=false;if(!skinTone)return;const reference=referenceViews.reference;
-  skinToneApplied=skinTone.draw(target,source,reference?.skinTone||reference?.toneTarget,{enabled:currentFilter==='retrato'&&!comparing&&$('#reference-body-tone').checked,amount:referenceFace.opacity,colorMode:$('#reference-color-mode').value,colorMix:Number($('#reference-color-mix').value)/100,schedule:!capture&&!analyzingReference},performance.now());
+function currentCameraTone(trackingPoints=null){
+  if(!skinTone?.ready||performance.now()-skinTone.sampleAt>=1800)return null;
+  const mean=cameraSceneTone.update(skinTone.faceTone,skinTone.sampleYaw,skinTone.sampleAt);return mean?{mean:mean.slice()}:null;
+}
+function drawSkinTone(target,source,capture=false,trackingPoints=null){
+  skinToneApplied=false;if(!skinTone)return;const reference=referenceViews.reference,p=trackingPoints||neuralMotion.predict(performance.now())||points;
+  skinToneApplied=skinTone.draw(target,source,reference?.skinTone||reference?.toneTarget,{enabled:currentFilter==='retrato'&&!comparing&&$('#reference-body-tone').checked,amount:referenceFace.opacity,yaw:p?FacePose.basis(p,overlay.width).yaw:0,sceneTone:currentCameraTone(trackingPoints),colorMode:$('#reference-color-mode').value,colorMix:Number($('#reference-color-mix').value)/100,schedule:!capture&&!analyzingReference},performance.now());
   const text=!$('#reference-body-tone').checked?'Piel visible · Ajuste del cuerpo desactivado.':$('#reference-color-mode').value==='camera'?'Piel visible · Se conserva el tono de cámara.':skinTone.failed?'Piel visible · No se pudo iniciar la segmentación; vuelve a encender la cámara.':skinTone.ready&&performance.now()-skinTone.sampleAt<4000?'Piel visible · Matiz armonizado · Luz y sombras conservadas.':'Piel visible · Preparando segmentación local…';
   if($('#skin-tone-status').textContent!==text)$('#skin-tone-status').textContent=text;
 }
@@ -313,7 +320,7 @@ async function ensureNeuralEngine(){
     updateNeuralStatus();
   }finally{backendChecking=false;}
 }
-function neuralViewSettings(){return {identityLock:true,shape:referenceFace.shape,opacity:referenceFace.opacity,eyes:referenceFace.eyes,mouth:referenceFace.mouth,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,colorMode:$('#reference-color-mode').value,colorMix:Number($('#reference-color-mix').value)/100,cameraTone:skinTone?.ready&&performance.now()-skinTone.sampleAt<1800?{mean:skinTone.faceTone||skinTone.bodyTone}:null,dense:$('#reference-surface').value==='dense',motion:$('#reference-motion').checked,liveMouth:$('#reference-live-mouth').checked};}
+function neuralViewSettings(trackingPoints=null){const fast=!capturePreparing&&$('#reference-auto-response').checked&&neuralMotion.isMoving(performance.now());return {identityLock:true,shape:referenceFace.shape,opacity:referenceFace.opacity,eyes:referenceFace.eyes,mouth:referenceFace.mouth,forehead:referenceFace.forehead,chin:referenceFace.chin,softness:referenceFace.softness,colorMode:$('#reference-color-mode').value,colorMix:Number($('#reference-color-mix').value)/100,cameraTone:currentCameraTone(trackingPoints),dense:$('#reference-surface').value==='dense'&&!fast,motion:$('#reference-motion').checked,liveMouth:$('#reference-live-mouth').checked};}
 function drawNeuralResult(capture=false){
   const source=capture?frame:{width:overlay.width,height:overlay.height,video,mirror:facing==='user'};drawSkinTone(capture?ctx:null,source,capture);
   const current=neuralMotion.predict(performance.now()),result=neuralPortrait.select(current,overlay.width,performance.now(),referenceViews.reference||referenceFace.choose(current),overlay.height);
@@ -405,10 +412,10 @@ async function prepareNeuralPhoto(){
       for(;;){check();const key=neuralPortrait.last;if(key?.capturedAt===shot.capturedAt&&key.registered){result=key;break;}if(performance.now()>deadline)throw new Error('No se pudo registrar el rostro generado para esta foto.');if(!neuralPortrait.busy&&neuralPortrait.next>performance.now()&&key?.capturedAt!==shot.capturedAt)throw new Error(neuralMessage||'No se pudo generar el rostro.');await new Promise(r=>setTimeout(r,50));}
     }
     if(skinTone&&referenceFace.opacity>.01&&$('#reference-body-tone').checked&&$('#reference-color-mode').value!=='camera'){
-      const data=await skinTone.client.segment(shot.display,256);check();skinTone.accept(data,shot.display,performance.now());skinTone.failed=false;
+      const data=await skinTone.client.segment(shot.display,256,{purpose:'skin'});check();skinTone.accept(data,shot.display,performance.now(),pose.yaw);skinTone.failed=false;
     }
-    fc.clearRect(0,0,frame.width,frame.height);fc.drawImage(shot.display,0,0);ctx.clearRect(0,0,overlay.width,overlay.height);ctx.drawImage(frame,0,0);drawSkinTone(ctx,frame,true);
-    const rendered=neuralView.draw(ctx,frame,shot.points,result,neuralViewSettings(),performance.now());if(!rendered)throw new Error('La pose de la foto no tiene un resultado de IA válido.');
+    fc.clearRect(0,0,frame.width,frame.height);fc.drawImage(shot.display,0,0);ctx.clearRect(0,0,overlay.width,overlay.height);ctx.drawImage(frame,0,0);drawSkinTone(ctx,frame,true,shot.points);
+    const rendered=neuralView.draw(ctx,frame,shot.points,result,neuralViewSettings(shot.points),performance.now());if(!rendered)throw new Error('La pose de la foto no tiene un resultado de IA válido.');
     return {image:overlay.toDataURL('image/jpeg',.88),points:neuralView.latestPoints.map(p=>({x:p.x/overlay.width,y:p.y/overlay.height,z:p.z||0}))};
   }finally{
     capturePreparing=false;neuralSample=null;lastSubmittedSample=null;
@@ -601,7 +608,7 @@ $('#reference-engine').addEventListener('change',async event=>{
 });
 $('#reference-profile').addEventListener('change',event=>{
   const profiles={natural:{shape:.65,complexion:.72,softness:.65,stability:.55,detail:1,eyes:0,mouth:0,forehead:0,chin:0},likeness:{shape:.85,complexion:.82,softness:.6,stability:.5,detail:1.05,eyes:0,mouth:0,forehead:0,chin:0},fluid:{shape:.55,complexion:.7,softness:.6,stability:.45,detail:.9,eyes:0,mouth:0,forehead:0,chin:0}};
-  const profile=profiles[event.target.value];if(!profile)return;$('#reference-identity').value=event.target.value==='likeness'?'90':event.target.value==='fluid'?'45':'65';$('#reference-identity-value').textContent=$('#reference-identity').value+'%';
+  const profile=profiles[event.target.value];if(!profile)return;$('#reference-identity').value=event.target.value==='likeness'?'90':event.target.value==='fluid'?'55':'75';$('#reference-identity-value').textContent=$('#reference-identity').value+'%';
   $('#reference-quality').value='balanced';configureNeuralQuality();neuralPortrait.reset(true);neuralView?.reset();
   for(const [key,value]of Object.entries(profile)){referenceFace[key]=value;if($('#reference-'+key))$('#reference-'+key).value=Math.round(value*100);if($('#reference-'+key+'-value'))$('#reference-'+key+'-value').textContent=Math.round(value*100)+'%';}
   resolutionLimit=event.target.value==='fluid'?480:0;$('#reference-resolution').value=String(resolutionLimit);

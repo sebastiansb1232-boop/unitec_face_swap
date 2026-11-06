@@ -1,6 +1,6 @@
 # Another Face · Inicio en Windows
 
-**Entrega 1.15.0:** mejora la integración de color y conserva las sombras del cuello. Añade recorte facial antes del reescalado, superficie curva y compensación local de ojos/boca. Si ya tienes HyperSwap, **no necesitas descargar modelos ni reinstalar DirectML**. Actualiza el código y sigue [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
+**Entrega 1.16.0:** mejora seguimiento, proporciones y color entre perfiles. Priorizar respuesta al girar reduce la carga durante el movimiento. Si ya tienes HyperSwap, reutiliza modelos y DirectML. Sigue [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar y conocer los límites de latencia.
 
 **Para servir la página desde Render y utilizar la IA de tu PC**, sigue [MIGRAR-RENDER.md](MIGRAR-RENDER.md). Los pasos de esta página ejecutan web e IA juntas en la misma computadora.
 

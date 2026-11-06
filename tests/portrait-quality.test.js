@@ -32,14 +32,14 @@ test('el registro acepta un ajuste pequeño y rechaza otra cara, un espejo y coo
 });
 test('las transiciones no superponen una pose o expresión anterior incompatible',()=>{
   const a={registered:true,yaw:.01,expression:[.2,.2,.03]},b={registered:true,yaw:.02,expression:[.21,.2,.04]};
-  assert.equal(Q.textureTransition(a,b),80);
+  assert.equal(Q.textureTransition(a,b),35);
   assert.equal(Q.textureTransition(a,{...b,yaw:.2}),0);
   assert.equal(Q.textureTransition(a,{...b,expression:[.02,.2,.04]}),0);
   assert.equal(Q.textureTransition(a,{...b,registered:false}),0);
 });
 test('dos intercambios de la misma identidad solo se funden si pose y gesto son compatibles',()=>{
  const a={registered:true,stableIdentity:true,model:'hyperswap_1c_256',referenceId:'same',yaw:0,pitch:0,expression:[.2,.2,.01]},b={...a,yaw:.02,expression:[.21,.2,.02]};
- assert.equal(Q.textureTransition(a,b),80);assert.equal(Q.textureTransition(a,{...b,referenceId:'other'}),0);assert.equal(Q.textureTransition(a,{...b,expression:[.21,.2,.4]}),0);assert.equal(Q.textureTransition(a,{...b,yaw:.1}),0);
+ assert.equal(Q.textureTransition(a,b),35);assert.equal(Q.textureTransition(a,{...b,referenceId:'other'}),0);assert.equal(Q.textureTransition(a,{...b,expression:[.21,.2,.4]}),0);assert.equal(Q.textureTransition(a,{...b,yaw:.1}),0);
 });
 test('la profundidad detectada llega a la vista después de suavizar y predecir',()=>{
   const p=face(),smoother=new A.ExpressionSmoother(),motion=new NeuralMotion();
@@ -79,3 +79,5 @@ test('el registro rechaza ojos desplazados hacia la frente aunque la escala sea 
  const input=face().map(p=>({x:p.x/320,y:p.y/280})),bad=input.map(p=>({...p,y:p.y-.15}));
  assert.equal(Q.registeredUV(bad,input,320,280),null);
 });
+
+test('el cambio de fotografía usa una transición menor de 50 ms y no mezcla identidades',()=>{const a={referencePhoto:true,stableIdentity:true,registered:true,referenceId:'same'},b={...a};assert.equal(Q.textureTransition(a,b),35);assert.equal(Q.textureTransition(a,{...b,referenceId:'other'}),0);});

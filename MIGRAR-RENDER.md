@@ -1,6 +1,6 @@
 # Another Face: página en Render e IA en tu PC
 
-**Actualización 1.15.0:** mejora color natural, recorte de seguimiento, superficie curva y compensación local de gestos. Reutiliza entorno, modelos y claves. Actualiza también Render y recarga con Ctrl + F5. La cabecera y `engine_version` deben mostrar 1.15.0; protocolo 5. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
+**Actualización 1.16.0:** seguimiento temporal, proporciones 3D y tono común entre perfiles. Reutiliza modelos, entorno y claves. Actualiza también Render y recarga. La cabecera y engine_version deben mostrar 1.16.0; protocolo 5 y caché v19. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md).
 
 La conexión introducida en 1.5.0 permite separar la página del motor neuronal. Render sirve la web y transmite las solicitudes al motor de tu PC mediante un túnel HTTPS. La PC ejecuta ArcFace y el modelo de intercambio instalado con el proveedor disponible; el navegador conserva el seguimiento y la composición en vivo. Puedes abrir la web desde un celular con cámara y HTTPS.
 

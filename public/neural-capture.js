@@ -3,8 +3,8 @@
  'use strict';
  async function captureFaceSnapshot(video,width,height,options){
   const source=document.createElement('canvas');source.width=width;source.height=height;source.getContext('2d').drawImage(video,0,0,width,height);
-  const capturedAt=root.performance.now();let result=await options.tracker.track(source,{refine:true,inputSize:768});
-  if(result&&!result.landmarks&&result.tracking?.cropped)result=await options.tracker.track(source,{refine:true,inputSize:768,reset:true});
+  const capturedAt=root.performance.now();let result=await options.tracker.track(source,{refine:true,inputSize:768,still:true});
+  if(result&&!result.landmarks&&result.tracking?.cropped)result=await options.tracker.track(source,{refine:true,inputSize:768,still:true,reset:true});
   if(!result&&options.fallback)result=await options.fallback(source);
   if(!result?.landmarks||result.landmarks.length<468)throw new Error('No se detectó un rostro en la foto. Vuelve al encuadre y repite la captura.');
   const raw=result.landmarks.map(p=>({x:options.mirror?1-p.x:p.x,y:p.y,z:p.z||0}));

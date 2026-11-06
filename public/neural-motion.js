@@ -6,18 +6,22 @@
   const Pose=root.FacePose||(typeof require==='function'?require('./face-pose'):null);
   class NeuralMotion{
     constructor(){this.reset();}
-    reset(){this.previous=null;this.current=null;this.times=[];}
-    update(points,time,width=1,cameraPoints=null){
+    reset(){this.previous=null;this.current=null;this.times=[];this.movingUntil=-Infinity;}
+    update(points,time,width=1,cameraPoints=null,received=time){
       if(!points||points.length<468||!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))){this.reset();return;}
       const next={points:points.map(p=>({...p})),camera:cameraPoints?.map(p=>({...p})),basis:basis(points),pose:Pose?Pose.basis(points,width):null,width,time};next.points.stamp=time;if(points.signals)next.points.signals=points.signals;
       if(next.camera)next.points.camera=next.camera;
       this.previous=this.current;this.current=next;this.times.push(time);this.times=this.times.slice(-16);
+      const p=this.previous;if(p&&time>p.time){const dt=(time-p.time)/1000,turn=next.pose&&p.pose?Math.abs(next.pose.yaw-p.pose.yaw)/dt:0,translation=Math.hypot(next.basis.origin.x-p.basis.origin.x,next.basis.origin.y-p.basis.origin.y)/Math.max(next.basis.scale,1)/dt;
+        if(turn>.35||translation>.5)this.movingUntil=received+350;
+      }
     }
+    isMoving(now){return now<this.movingUntil;}
     get fps(){return this.times.length>1?(this.times.length-1)*1000/Math.max(this.times.at(-1)-this.times[0],1):0;}
     predict(now){
       const c=this.current,p=this.previous;if(!c||now-c.time>700)return null;
       if(!p||c.time-p.time<8||c.time-p.time>700)return c.points;
-      const dt=(c.time-p.time)/1000,look=clamp((now-c.time)/1000,0,.035),b=c.basis,old=p.basis;
+      const dt=(c.time-p.time)/1000,look=clamp((now-c.time)/1000,0,Math.min(.080,dt*.95)),b=c.basis,old=p.basis;
       const speed=b.scale*3,dx=clamp((b.origin.x-old.origin.x)/dt,-speed,speed)*look,dy=clamp((b.origin.y-old.origin.y)/dt,-speed,speed)*look;
       // Giro rígido breve: no extrapolar el ancho facial como una escala 2D.
       let omega={x:0,y:0,z:0};if(Pose&&p.pose&&c.pose&&p.width===c.width)for(const axis of ['x','y','z']){const v=Pose.cross(p.pose[axis],c.pose[axis]);for(const a of ['x','y','z'])omega[a]+=v[a]/(2*dt);}

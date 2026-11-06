@@ -26,11 +26,17 @@
         uniform sampler2D photoA;uniform sampler2D photoB;uniform sampler2D camera;uniform sampler2D background;uniform sampler2D oldFace;uniform float backgroundReady;
         uniform float transition;uniform float oralBlend;uniform float intensity;uniform float onlyLive;uniform float cameraMirror;
         uniform float feather;uniform float matteA;uniform float matteB;
-        uniform vec3 complexion;uniform vec4 eyeA;uniform vec4 eyeB;uniform vec2 eyeAssist;uniform sampler2D driver;uniform vec3 motion;uniform vec4 mouthRegion;uniform vec2 cameraSize;uniform vec2 faceAxis;
+        uniform vec3 complexion;uniform vec3 complexionA;uniform vec4 eyeA;uniform vec4 eyeB;uniform vec2 eyeAssist;uniform sampler2D driver;uniform vec3 motion;uniform vec4 mouthRegion;uniform vec2 cameraSize;uniform vec2 faceAxis;
         varying vec2 a;varying vec2 b;varying vec2 c;varying vec2 d;varying vec2 screenUV;varying float border;varying float own;varying float cover;
         vec2 cameraUV(vec2 p){return vec2(mix(p.x,1.-p.x,cameraMirror),p.y);}
         float regionDistance(vec4 e){vec2 p=(c-e.xy)*cameraSize;return length(vec2(dot(p,faceAxis),dot(p,vec2(-faceAxis.y,faceAxis.x)))/max(e.zw*cameraSize,vec2(.0001)));}
         float eyeMask(vec4 e){return 1.-smoothstep(.65,1.15,regionDistance(e));}
+        vec3 colorize(vec3 color,vec3 change,float skinWeight){
+          float Y=dot(color,vec3(.299,.587,.114))+change.x;
+          float U=dot(color,vec3(-.168736,-.331264,.5))+change.y*skinWeight;
+          float V=dot(color,vec3(.5,-.418688,-.081312))+change.z*skinWeight;
+          return vec3(Y+1.402*V,Y-.344136*U-.714136*V,Y+1.772*U);
+        }
         void main(){
           vec3 original=texture2D(camera,cameraUV(c)).rgb;
           if(onlyLive>.5){float alpha=onlyLive>1.5?smoothstep(0.,.25,cover):intensity;
@@ -41,16 +47,13 @@
           // Las capas PNG ya tienen un único borde interior; JPEG anterior usa el contorno.
           left*=mix(edgeAlpha,1.,matteA);right*=mix(edgeAlpha,1.,matteB);
           vec4 layer=mix(left,right,transition);
-          vec3 generated=layer.rgb/max(layer.a,.001);generated=mix(generated,left.rgb/max(left.a,.001),max(eyeMask(eyeA)*eyeAssist.x,eyeMask(eyeB)*eyeAssist.y));
-          vec3 weights=vec3(.299,.587,.114);
-          // Corrección uniforme y acotada: conserva poros y gradientes.
           float skinWeight=(1.-.8*max(eyeMask(eyeA),eyeMask(eyeB)))*(1.-smoothstep(.015,.12,cover));
-          // Ojos y dientes también reciben la exposición del escenario; solo
-          // el matiz de piel se atenúa en esas zonas para no teñirlos.
-          float Y=dot(generated,weights)+complexion.x;
-          float U=dot(generated,vec3(-.168736,-.331264,.5))+complexion.y*skinWeight;
-          float V=dot(generated,vec3(.5,-.418688,-.081312))+complexion.z*skinWeight;
-          generated=clamp(vec3(Y+1.402*V,Y-.344136*U-.714136*V,Y+1.772*U),0.,1.);
+          // Igualar ambas texturas antes de fundirlas. Usar solo la corrección
+          // de la vista nueva provocaba un destello al cambiar de perfil.
+          vec3 colorA=colorize(left.rgb/max(left.a,.001),complexionA,skinWeight);
+          vec3 colorB=colorize(right.rgb/max(right.a,.001),complexion,skinWeight);
+          vec3 generated=(colorA*left.a*(1.-transition)+colorB*right.a*transition)/max(layer.a,.001);
+          generated=clamp(mix(generated,colorA,max(eyeMask(eyeA)*eyeAssist.x,eyeMask(eyeB)*eyeAssist.y)),0.,1.);
           float mouthMask=1.-smoothstep(.55,1.15,regionDistance(mouthRegion));
           float compensation=max(mouthMask*motion.z,max(eyeMask(eyeA)*motion.x,eyeMask(eyeB)*motion.y));
           // Diferencia temporal alineada: el detalle que cambia se suma a la
@@ -66,7 +69,7 @@
       gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer=gl.createBuffer());
       this.data=new Float32Array((this.surface?.vertexCount||475)*14);gl.bufferData(gl.ARRAY_BUFFER,this.data.byteLength,gl.DYNAMIC_DRAW);
       [['pos',3,0],['sourceA',2,12],['sourceB',2,20],['live',2,28],['edge',1,36],['native',1,40],['erase',1,44],['driverUV',2,48]].forEach(([name,size,offset])=>{const loc=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,56,offset);});
-      this.uniforms=Object.fromEntries(['transition','oralBlend','intensity','onlyLive','cameraMirror','feather','matteA','matteB','eyeA','eyeB','eyeAssist','complexion','backgroundReady','motion','mouthRegion','cameraSize','faceAxis'].map(n=>[n,gl.getUniformLocation(program,n)]));
+      this.uniforms=Object.fromEntries(['transition','oralBlend','intensity','onlyLive','cameraMirror','feather','matteA','matteB','eyeA','eyeB','eyeAssist','complexion','complexionA','backgroundReady','motion','mouthRegion','cameraSize','faceAxis'].map(n=>[n,gl.getUniformLocation(program,n)]));
       ['photoA','photoB','camera','background','oldFace','driver'].forEach((n,i)=>gl.uniform1i(gl.getUniformLocation(program,n),i));
       this.textureSizes=[];this.textures=Array.from({length:6},(_,i)=>{gl.activeTexture(gl.TEXTURE0+i);const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);for(const p of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,p,gl.LINEAR);for(const p of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,p,gl.CLAMP_TO_EDGE);return t;});
       for(const unit of [2,3,4,5]){gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,this.textures[unit]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(4));}
@@ -93,10 +96,10 @@
       path(cameraPoints,ids);x.fillStyle=x.strokeStyle='white';x.lineJoin='round';x.lineWidth=2;x.fill();x.stroke();
       // Solo borrar la silueta realmente desocupada. Borrar la cara completa
       // dejaba un anillo de LaMa bajo el borde semitransparente de la cara.
-      x.globalCompositeOperation='destination-out';path(destination,Q.silhouetteIds(destination));x.lineWidth=Math.max(4,root.FaceAppearance.basis(cameraPoints).scale*.12);x.fill();x.stroke();this.upload(4,c);return true;
+      x.globalCompositeOperation='destination-out';path(destination,Q.silhouetteIds(destination));x.lineWidth=Math.max(1.5,root.FaceAppearance.basis(cameraPoints).scale*.025);x.fill();x.stroke();this.upload(4,c);return true;
     }
     hide(){this.canvas.hidden=true;this.latestPoints=null;}
-    reset(){this.key=null;this.previous=null;this.changed=0;this.shape.reset();this.gaze=[{x:0,y:0},{x:0,y:0}];this.eyeBlend=[0,0];this.drawTime=null;this.oralBlend=0;this.boundaryStamp=null;this.boundaryKey=null;this.midEdges=null;this.midLocal=null;this.eyeReference=null;this.toneFilter=root.PortraitBlend?new root.PortraitBlend.ToneFilter():null;this.toneStats=new WeakMap();this.toneSampleAt=-Infinity;this.liveTone=null;this.toneTargetReady=false;this.hide();}
+    reset(){this.key=null;this.previous=null;this.changed=0;this.shape.reset();this.gaze=[{x:0,y:0},{x:0,y:0}];this.eyeBlend=[0,0];this.drawTime=null;this.oralBlend=0;this.boundaryStamp=null;this.boundaryKey=null;this.midEdges=null;this.midLocal=null;this.eyeReference=null;this.toneStats=new WeakMap();this.sceneTone=root.PortraitBlend?new root.PortraitBlend.SceneTone():null;this.toneSampleAt=-Infinity;this.liveTone=null;this.hide();}
     upload(unit,image){const gl=this.gl,w=image.videoWidth||image.naturalWidth||image.width,h=image.videoHeight||image.naturalHeight||image.height;gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,this.textures[unit]);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);if(this.textureSizes[unit]?.[0]===w&&this.textureSizes[unit]?.[1]===h)gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gl.RGBA,gl.UNSIGNED_BYTE,image);else{gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);this.textureSizes[unit]=[w,h];}}
     draw(ctx,frame,points,key,settings,now){
       if(!key?.uv||!points||this.lost||key.registrationRequired&&!key.registered){this.hide();return false;}
@@ -113,17 +116,17 @@
       const eyeReference=key.model==='live_portrait_512'&&key.generatedPoints&&key.referenceLayers?.length?key.referenceLayers.reduce((a,b)=>Math.abs(root.FacePose.basis(a.points,a.width).yaw-yaw)<Math.abs(root.FacePose.basis(b.points,b.width).yaw-yaw)?a:b):null;
       if(key!==this.key||eyeReference!==this.eyeReference){this.duration=eyeReference?0:Q.textureTransition(this.key,key);this.previous=this.duration?this.key:key;this.key=key;this.changed=now;this.eyeReference=eyeReference;this.referenceUV=eyeReference?.points.map(p=>({x:p.x/eyeReference.image.width,y:p.y/eyeReference.image.height}));this.upload(0,eyeReference?.image||this.previous.layer||this.previous.image);this.upload(1,key.layer||key.image);if(key.input&&key.crop?.uv)this.upload(5,key.input);}
       if(root.ReferenceTone&&root.PortraitBlend&&settings.integrate!==false){
-        if(!this.toneStats.has(key)){const im=key.image,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;this.toneStats.set(key,key.model!=='live_portrait_512'&&key.toneSource||root.ReferenceTone.sample(im,key.uv.map(p=>({x:p.x*w,y:p.y*h}))));}
+        const sample=k=>{if(!this.toneStats.has(k)){const im=k.image,w=im.naturalWidth||im.width,h=im.naturalHeight||im.height;this.toneStats.set(k,k.model!=='live_portrait_512'&&k.toneSource||root.ReferenceTone.sample(im,k.uv.map(p=>({x:p.x*w,y:p.y*h}))));}return this.toneStats.get(k);};
+        if(eyeReference&&!this.toneStats.has(eyeReference))this.toneStats.set(eyeReference,root.ReferenceTone.sample(eyeReference.image,eyeReference.points));
+        const source=sample(key),leftSource=eyeReference?this.toneStats.get(eyeReference):sample(this.previous);
         if(!settings.cameraTone&&now-this.toneSampleAt>220){
           this.toneSampleAt=now;const c=this.toneCanvas||(this.toneCanvas=document.createElement('canvas'));c.width=160;c.height=Math.max(1,Math.round(160*frame.height/frame.width));const x=c.getContext('2d',{willReadFrequently:true});
           if(frame.video&&frame.mirror){x.translate(c.width,0);x.scale(-1,1);}x.drawImage(frame.video||frame,0,0,c.width,c.height);
           this.liveTone=root.ReferenceTone.sample(c,cameraPoints.map(p=>({x:p.x*c.width/frame.width,y:p.y*c.height/frame.height})));
         }
-        const source=this.toneStats.get(key);
         const cameraTone=settings.cameraTone||this.liveTone;
-        if(cameraTone&&!this.toneTargetReady){this.toneFilter.value=cameraTone.mean.slice();this.toneTargetReady=true;}
-        const target=cameraTone?{mean:this.toneFilter.update(cameraTone.mean,now)}:null,t=root.PortraitBlend.tone(source,target,settings.colorMode||'natural',settings.colorMix??.65,key.referenceTone);gl.uniform3f(this.uniforms.complexion,...t);
-      }else gl.uniform3f(this.uniforms.complexion,0,0,0);
+        const target=settings.cameraTone|| (cameraTone?{mean:this.sceneTone.update(cameraTone.mean,yaw,this.toneSampleAt)}:null),mode=settings.colorMode||'natural',mix=settings.colorMix??.65,t=root.PortraitBlend.tone(source,target,mode,mix,key.referenceTone),a=root.PortraitBlend.tone(leftSource,target,mode,mix,this.previous.referenceTone||key.referenceTone);gl.uniform3f(this.uniforms.complexion,...t);gl.uniform3f(this.uniforms.complexionA,...a);
+      }else{gl.uniform3f(this.uniforms.complexion,0,0,0);gl.uniform3f(this.uniforms.complexionA,0,0,0);}
       const elapsed=this.drawTime===null?33:Math.max(1,Math.min(now-this.drawTime,100));this.drawTime=now;
       const liveExpression=Q.expression(points),nativeExpression=key.generatedPoints?Q.expression(key.generatedPoints):liveExpression;
       for(let k=0;k<2;k++){const desired=eyeReference?Q.smooth(.05,.14,liveExpression[k]-nativeExpression[k]):0;this.eyeBlend[k]+=(desired-this.eyeBlend[k])*(1-Math.exp(-elapsed/65));}
@@ -141,7 +144,7 @@
       const stamp=points.stamp??now,freshSurface=this.boundaryStamp!==stamp||this.boundaryKey!==key||this.boundaryShape!==settings.shape||this.boundaryContour!==backgroundReady;if(freshSurface){this.boundaryStamp=stamp;this.boundaryKey=key;this.boundaryShape=settings.shape;this.boundaryContour=backgroundReady;this.boundaryIds=Q.silhouetteIds(points);this.edgeValues=Q.silhouetteEdges(destination,Q.silhouetteIds(destination),pose3D?.scale||basis.scale);this.midEdges=null;this.midLocal=null;}
       const edges=key.layer&&this.previous.layer&&!key.rectangularLayer&&!this.previous.rectangularLayer?null:this.edgeValues;
       const liveOral=root.PortraitBlend.interiorWeight(yaw,liveExpression[2],settings.identityLock&&settings.liveMouth!==false);
-      this.oralBlend+=(liveOral-this.oralBlend)*(1-Math.exp(-elapsed/55));gl.uniform1f(this.uniforms.oralBlend,this.oralBlend);
+      this.oralBlend+=(liveOral-this.oralBlend)*(1-Math.exp(-elapsed/20));gl.uniform1f(this.uniforms.oralBlend,this.oralBlend);
       // El vídeo nativo ya presenta el cuerpo. Solo subir otra copia si una
       // región facial realmente necesita píxeles de cámara.
       const motionActive=settings.motion!==false&&!key.referencePhoto&&key.model!=='live_portrait_512'&&key.input&&driverUV,poseTrust=1-Q.smooth(.18,.48,Math.abs(yaw-(key.yaw??yaw))),mouthTop=points[0],mouthBottom=points[17],mouthWidth=Math.hypot(points[61].x-points[291].x,points[61].y-points[291].y);
@@ -162,7 +165,7 @@
           const liveCenter=center(ids,points),dx=points[b].x-points[a].x,dy=points[b].y-points[a].y,w=Math.max(Math.hypot(dx,dy),1),x=dx/w,y=dy/w;
           const tx=destination[b].x-destination[a].x,ty=destination[b].y-destination[a].y,top=k===0?159:386,bottom=k===0?145:374;
           const maxY=Math.min(.08,.35*Math.hypot(destination[top].x-destination[bottom].x,destination[top].y-destination[bottom].y)/Math.max(Math.hypot(tx,ty),1));
-          const desiredX=clamp(((points[iris].x-liveCenter.x)*x+(points[iris].y-liveCenter.y)*y)/w,-.14,.14),desiredY=clamp((-(points[iris].x-liveCenter.x)*y+(points[iris].y-liveCenter.y)*x)/w,-maxY,maxY),g=this.gaze[k],alpha=1-Math.exp(-elapsed/65);g.x+=(desiredX-g.x)*alpha;g.y+=(desiredY-g.y)*alpha;const px=g.x,py=clamp(g.y,-maxY,maxY);
+          const desiredX=clamp(((points[iris].x-liveCenter.x)*x+(points[iris].y-liveCenter.y)*y)/w,-.14,.14),desiredY=clamp((-(points[iris].x-liveCenter.x)*y+(points[iris].y-liveCenter.y)*x)/w,-maxY,maxY),g=this.gaze[k],alpha=1-Math.exp(-elapsed/15);g.x+=(desiredX-g.x)*alpha;g.y+=(desiredY-g.y)*alpha;const px=g.x,py=clamp(g.y,-maxY,maxY);
           target={...target,x:target.x+tx*px-ty*py,y:target.y+ty*px+tx*py};textureA=uvA[iris];textureB=uvB[iris];if(driverUV?.[iris])snapshotUV=driverUV[iris];if(cameraPoints[iris])livePoint=cameraPoints[iris];
         }
         vertex(468+k,target,k===2&&oralMap?oralMap(target):livePoint,1,amounts[k],true,textureA,textureB,k===2?1:0,snapshotUV);

@@ -27,6 +27,12 @@ test('la calibración requiere muestras neutrales distintas y conserva el conduc
 test('un gesto nuevo no sustituye toda la textura neuronal por una fotografía',()=>{
  const {n,scope}=client(async()=>response({}));scope.FacePose={basis:()=>({yaw:0,pitch:0})};const key={registered:true,received:1000,yaw:0,expression:[0,0,0],requestMs:20000};n.last=key;n.validCache.set(0,key);assert.equal(n.select(points,640,2000,ref,480),key);
 });
+test('volver a ambos perfiles reutiliza inmediatamente una identidad ya generada y rechaza otra referencia',()=>{
+ let requests=0;const {n,scope}=client(async()=>{requests++;return response({});});scope.FacePose={basis:p=>({yaw:p.yaw||0,pitch:0})};const reference={...ref,uid:'persistent'},keys=[-.7,0,.7].map(yaw=>({model:'hyperswap_1c_256',referenceId:'persistent',registered:true,received:1000,yaw,pitch:0,expression:scope.PortraitQuality.expression(points),requestMs:150}));
+ n.last=keys[2];keys.forEach((key,i)=>n.validCache.set(i,key));
+ for(const [i,yaw]of [[0,-.7],[2,.7],[1,0]]){const p=points.map(v=>({...v}));p.yaw=yaw;assert.equal(n.select(p,640,20000,reference,480),keys[i]);}
+ assert.equal(requests,0);assert.equal(n.select(points,640,20000,{...reference,uid:'other'},480),null);assert.equal(n.select(points,640,47000,reference,480),null);
+});
 test('neural: un solo fotograma en vuelo y la referencia se reutiliza',async()=>{
   let refs=0,frames=0;const {n,completed}=client(async url=>{if(url.endsWith('/reference')){refs++;return response({reference_id:'test-reference'});}frames++;return response({image:'result',ms:20,provider:'CPUExecutionProvider'});});
   const raw=[{x:.2,y:.4,z:0}];n.submit(frame,points,ref,{},raw);n.submit(frame,points,ref,{},raw);

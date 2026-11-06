@@ -1,4 +1,4 @@
-> **Another Face 1.15.0 · Color natural, seguimiento por recorte, superficie curva y compensación local de ojos y boca.** Reutiliza tus modelos y el entorno. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar tu misma carpeta y Render.
+> **Another Face 1.16.0 · Seguimiento temporal estable, perfiles con proporciones 3D, matiz común y respuesta automática al girar.** Reutiliza tus modelos. Consulta [MEJORAS-RETRATO.md](MEJORAS-RETRATO.md) para actualizar tu misma carpeta y Render.
 
 
 # Another Face
@@ -60,7 +60,7 @@ Las sesiones y límites viven en memoria: un reinicio cierra la sesión, y vario
 
 Node 22. Copia `.env.example` a `.env`, rellena las variables, ejecuta `npm ci` y `npm start`. Para pruebas sin Supabase real: `npm test`. Para el motor neuronal: `npm run start:ai`, después de la instalación descrita en IA-LOCAL.md.
 
-Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Pasan 122 pruebas JavaScript y 50 Python, incluidas tres vistas, giro, profundidad, cierre de boca, límites de lengua, exposición corporal acotada, ROI, superficie curva, LaMa, clave privada y resultados atrasados. Las pruebas de navegador ejecutan intercambio HyperSwap, segmentación local real y captura con guardado simulado; las pruebas WebGL comprueban espejo, piel, ropa y fondo en casos controlados. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
+Las pruebas automatizadas cubren geometría, expresión, color, estabilización, iluminación y guardado con un servidor de Supabase simulado. Pasan 136 pruebas JavaScript y 50 Python, incluidas tres vistas, giro, profundidad, cierre de boca, límites de lengua, exposición corporal acotada, ROI, superficie curva, LaMa, clave privada y resultados atrasados. Las pruebas de navegador ejecutan intercambio HyperSwap, segmentación local real y captura con guardado simulado; las pruebas WebGL comprueban espejo, piel, ropa y fondo en casos controlados. Consulta MEJORAS-RETRATO.md para las pruebas actuales y sus límites, MIGRAR-RENDER.md para la conexión y FILTRO-RETRATO.md para comprobaciones históricas. No se han probado las credenciales reales, tu GPU ni un despliegue de esta actualización.
 
 Antes de publicar, comprobar en Chrome Android y Chrome/Edge de PC:
 - Permitir y denegar cámara; encender, apagar y cambiar cámara.

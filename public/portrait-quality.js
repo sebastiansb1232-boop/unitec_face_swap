@@ -5,6 +5,7 @@
   const {basis,normalize,clamp}=A;
   const Mouth=root.MouthMotion||(typeof require==='function'?require('./mouth-motion'):null);
   const Pose=root.FacePose||(typeof require==='function'?require('./face-pose'):null);
+  const Proportions=root.FaceProportions||(typeof require==='function'?require('./face-proportions'):null);
   const OVAL=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109];
   const HOLES=[...A.EYES,[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95]];
   const eyeAndLip=new Set([...A.EYES.flat(),...A.LIPS]),BROWS=[...A.EXPRESSIVE].filter(i=>!eyeAndLip.has(i));
@@ -73,18 +74,19 @@
   function textureTransition(previous,next){
     if(!previous||previous===next||!previous.registered||!next.registered)return 0;
     if(previous.stableIdentity||next.stableIdentity){
+      if(previous.referencePhoto&&next.referencePhoto&&previous.referenceId===next.referenceId)return 35;
       const swap=k=>/^(hyperswap|inswapper)/.test(k.model||'');
       if(!swap(previous)||!swap(next)||previous.referenceId!==next.referenceId)return 0;
       if(Math.abs((previous.yaw||0)-(next.yaw||0))>.045||Math.abs((previous.pitch||0)-(next.pitch||0))>.045)return 0;
       if(previous.expression&&next.expression&&previous.expression.some((v,i)=>Math.abs(v-next.expression[i])>.045))return 0;
       if(previous.generatedPoints&&next.generatedPoints&&expression(previous.generatedPoints).some((v,i)=>Math.abs(v-expression(next.generatedPoints)[i])>.06))return 0;
       if(previous.toneSource&&next.toneSource&&Math.abs(previous.toneSource.mean[0]-next.toneSource.mean[0])>.025)return 0;
-      return 80;
+      return 35;
     }
     if(Math.abs((previous.yaw||0)-(next.yaw||0))>.075)return 0;
     const a=previous.expression,b=next.expression;
     if(a&&b&&a.some((v,i)=>Math.abs(v-b[i])>.07))return 0;
-    return 80;
+    return 35;
   }
   function expression(points){
     const ratio=([a,b,t,d])=>distance(points[t],points[d])/Math.max(distance(points[a],points[b]),1);
@@ -136,7 +138,7 @@
     return desired.map((p,i)=>{const w=smooth(.005,.14,edge[i]);return {...p,x:live[i].x+(p.x-live[i].x)*w,y:live[i].y+(p.y-live[i].y)*w,z:(live[i].z||0)+((p.z||0)-(live[i].z||0))*w};});
   }
   class IdentityShape{
-    reset(){this.key=null;this.uv=null;this.profile=null;this.offsets=null;this.time=null;this.identityKey=null;this.base3D=null;this.reference3D=null;this.offsets3D=null;this.calibrationCount=0;this.calibrationStamp=null;this.morphStamp=null;this.morphLocal=null;this.morphSettled=false;this.morphAmount=null;this.generatedKey=null;this.generatedShape=null;this.generatedBase=null;this.referenceShapes=null;this.screenLocal=null;this.morphTexture=null;this.swapDeltas=null;this.swapOffsets=null;this.swapSafe=null;this.swapStamp=null;this.swapKey=null;this.swapIdentity=null;}
+    reset(){this.key=null;this.uv=null;this.profile=null;this.offsets=null;this.time=null;this.identityKey=null;this.base3D=null;this.reference3D=null;this.offsets3D=null;this.calibrationCount=0;this.calibrationStamp=null;this.morphStamp=null;this.morphLocal=null;this.morphSettled=false;this.morphAmount=null;this.generatedKey=null;this.generatedShape=null;this.generatedBase=null;this.referenceShapes=null;this.screenLocal=null;this.morphTexture=null;this.swapDeltas=null;this.swapOffsets=null;this.swapSafe=null;this.swapStamp=null;this.swapKey=null;this.swapIdentity=null;this.proportions=null;this.swapSafe3D=null;}
     constructor(){this.reset();}
     apply(live,key,amount,now,triangles){
       if(key.generatedPoints&&/^(hyperswap|inswapper)/.test(key.model||'')&&key.inputUV)return this.applySwap(live,key,amount,now,triangles);
@@ -169,16 +171,21 @@
       if(!this.swapOffsets||this.swapIdentity!==key.referenceId){this.swapOffsets=desired.map(()=>({x:0,y:0}));this.swapTime=null;this.swapIdentity=key.referenceId;}
       if(update){
         const dt=this.swapTime===null?16:clamp(now-this.swapTime,1,100);this.swapTime=now;
-        const proposal=live.slice(0,468).map((p,i)=>{
-          const fast=eyeAndLip.has(i),limit=fast ? .035 : .085,weight=1-Math.exp(-dt/(fast?25:95)),o=this.swapOffsets[i];
+        let proposal=live.slice(0,468).map((p,i)=>{
+          const fast=eyeAndLip.has(i),limit=fast ? .035 : .085,weight=1-Math.exp(-dt/(fast?15:32)),o=this.swapOffsets[i];
           for(const axis of ['x','y'])o[axis]+=(clamp(desired[i][axis],-limit,limit)*strength-o[axis])*weight;
           return {...p,x:p.x+b.scale*(o.x*b.x.x+o.y*b.y.x),y:p.y+b.scale*(o.x*b.x.y+o.y*b.y.y)};
         });
-        const constrained=constrainGeometry(live.slice(0,468),this.allowContour===false?protectSilhouette(live,proposal,b.scale):proposal,triangles),safe=closed?Mouth.seal(constrained):constrained;
+        if(Proportions&&key.referenceViews?.length){this.proportions??=new Proportions.FaceProportions();proposal=this.proportions.apply(live,proposal,key,strength);if(triangles.length){const width=key.width||key.textureW,pose=Pose.basis(live,width);proposal=Pose.project(constrainMorph3D(Pose.normalize(live,width,pose),Pose.normalize(proposal,width,pose),triangles),pose);}}
+        const allowed=this.allowContour===false?protectSilhouette(live,proposal,b.scale):proposal,constrained=constrainGeometry(live.slice(0,468),allowed,triangles);
+        for(let i=0;i<constrained.length;i++){const raw=Math.hypot(allowed[i].x-live[i].x,allowed[i].y-live[i].y),safe=Math.hypot(constrained[i].x-live[i].x,constrained[i].y-live[i].y);constrained[i].z=(live[i].z||0)+((allowed[i].z||0)-(live[i].z||0))*(raw>1e-7?Math.min(1,safe/raw):1);}
+        const safe=closed?Mouth.seal(constrained):constrained;
+        if(this.proportions?.delta){const width=key.width||key.textureW,pose=Pose.basis(live,width),a=Pose.normalize(live,width,pose),d=Pose.normalize(safe,width,pose);this.swapSafe3D=d.map((p,i)=>({x:p.x-a[i].x,y:p.y-a[i].y,z:p.z-a[i].z}));}else this.swapSafe3D=null;
         this.swapSafe=safe.map((p,i)=>{const dx=p.x-live[i].x,dy=p.y-live[i].y;return {x:(dx*b.x.x+dy*b.x.y)/b.scale,y:(dx*b.y.x+dy*b.y.y)/b.scale};});
         this.swapStamp=stamp;this.swapKey=key;this.swapAmount=strength;this.swapContour=this.allowContour;
       }
       if(strength===0)return closed?Mouth.seal(live.slice(0,468)):live.slice(0,468).map(p=>({...p}));
+      if(this.swapSafe3D){const width=key.width||key.textureW,pose=Pose.basis(live,width),local=Pose.normalize(live,width,pose);return Pose.project(local.map((p,i)=>({x:p.x+this.swapSafe3D[i].x,y:p.y+this.swapSafe3D[i].y,z:p.z+this.swapSafe3D[i].z})),pose);}
       return live.slice(0,468).map((p,i)=>{const o=this.swapSafe[i];return {...p,x:p.x+b.scale*(o.x*b.x.x+o.y*b.y.x),y:p.y+b.scale*(o.x*b.x.y+o.y*b.y.y)};});
     }
     apply3D(live,key,amount,now,triangles){
@@ -186,7 +193,7 @@
       if(this.identityKey===identity&&this.morphTexture===key&&this.morphStamp===stamp&&this.morphAmount===amount&&this.contourMode===this.allowContour&&this.screenLocal)return Pose.project(this.screenLocal,b);
       const local=Pose.normalize(live,width,b);
       if(this.identityKey!==identity){
-        this.identityKey=identity;this.referenceShapes=key.referenceViews.map(v=>({side:v.side,yaw:Pose.basis(v.points,v.width||1).yaw,shape:Pose.normalize(v.points,v.width||1)}));this.reference3D=this.referenceShapes[0]?.shape;this.base3D=Pose.normalize(key.sourcePoints,width);this.offsets3D=local.map(()=>({x:0,y:0,z:0}));this.calibrationCount=0;this.calibrationStamp=null;this.time=null;
+        this.identityKey=identity;this.referenceShapes=key.referenceViews.map(v=>({side:v.side,yaw:Pose.basis(v.points,v.width||1).yaw,shape:Pose.normalize(v.points,v.width||1)}));this.reference3D=this.referenceShapes[0]?.shape;this.identity3D=Pose.fuseViews(key.referenceViews);this.base3D=Pose.normalize(key.sourcePoints,width);this.offsets3D=local.map(()=>({x:0,y:0,z:0}));this.calibrationCount=0;this.calibrationStamp=null;this.time=null;
       }
       if(!this.reference3D||amount<=0){this.offsets3D=local.map(()=>({x:0,y:0,z:0}));this.morphLocal=null;this.screenLocal=null;this.morphStamp=null;this.morphSettled=false;this.time=now;return live.map(p=>({...p}));}
       const expressions=expression(live);
@@ -197,7 +204,7 @@
       const selected=key.referencePhoto?this.referenceShapes.find(v=>v.side===key.activeView):null;
       const source=selected||this.referenceShapes.reduce((a,c)=>Math.abs(a.yaw-b.yaw)<Math.abs(c.yaw-b.yaw)?a:c);
       if(key.generatedPoints&&this.generatedKey!==key){this.generatedKey=key;this.generatedShape=Pose.normalize(key.generatedPoints,key.textureW);this.generatedBase=Pose.normalize(key.sourcePoints,width);}
-      const reference=key.generatedPoints?this.generatedShape:source.shape,base=key.generatedPoints?this.generatedBase:this.base3D,desired=reference.map(p=>({...p}));
+      const reference=key.generatedPoints?this.generatedShape:key.referencePhoto?this.identity3D:source.shape,base=key.generatedPoints?this.generatedBase:this.base3D,desired=reference.map(p=>({...p}));
       // La geometría de identidad procede de la vista correspondiente. Los
       // residuos de todos los vértices no son gestos: en perfil incluían error
       // de profundidad y desplazaban boca, nariz y ojos por segunda vez.
@@ -213,7 +220,7 @@
       for(let i=0;i<desired.length;i++)desired[i].y+=jaw*smooth(mouthCenter+.1,reference[152].y,reference[i].y);
       const browLift=clamp(BROWS.reduce((sum,i)=>sum+local[i].y-base[i].y,0)/Math.max(BROWS.length,1),-.08,.08)*(1-smooth(.3,1.1,Math.abs(b.yaw)));
       for(const id of BROWS)desired[id].y+=browLift;
-      const dt=this.time===null?16:clamp(now-this.time,0,100),alpha=1-Math.exp(-dt/85);this.time=now;
+      const dt=this.time===null?16:clamp(now-this.time,0,100),alpha=1-Math.exp(-dt/(key.referencePhoto?30:55));this.time=now;
       const strength=clamp(amount,0,1),limits={x:this.range||.25,y:(this.range||.25)*1.12,z:(this.range||.25)*.8};
       let error=0;
       const output=local.map((p,i)=>{

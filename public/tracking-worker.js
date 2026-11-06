@@ -1,6 +1,6 @@
-/* Detección sobre recortes móviles; la pose se estabiliza fuera del detector. */
+/* Seguimiento temporal dentro de un recorte estable; fotos independientes en IMAGE. */
 'use strict';
-let task=null,mesh=null,landmarks=null,refine=false,queue=Promise.resolve(),backend=null,role='live',lastTimestamp=0;
+let task=null,mesh=null,landmarks=null,refine=false,queue=Promise.resolve(),backend=null,role='live',lastTimestamp=0,runningMode='IMAGE';
 const local=file=>new URL(file,self.location.href).href;
 async function legacy(){
   importScripts(local('vendor/face-mesh/face_mesh.js'));
@@ -20,7 +20,8 @@ async function initialize(data){
     try{const probe=new OffscreenCanvas(1,1).getContext('webgl2'),debug=probe?.getExtension('WEBGL_debug_renderer_info');software=/swiftshader|llvmpipe|software|basic render/i.test(debug?probe.getParameter(debug.UNMASKED_RENDERER_WEBGL):'');probe?.getExtension('WEBGL_lose_context')?.loseContext();}catch{}
     for(const delegate of (role==='image'||data.forceCPU||software?['CPU']:['GPU','CPU'])){
       try{
-        task=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:local('assets/models/face_landmarker.task'),delegate},runningMode:'IMAGE',numFaces:1,minFaceDetectionConfidence:.55,minFacePresenceConfidence:.55,minTrackingConfidence:.55,outputFaceBlendshapes:role==='live',outputFacialTransformationMatrixes:false});
+        runningMode=role==='live'?'VIDEO':'IMAGE';
+        task=await FaceLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:local('assets/models/face_landmarker.task'),delegate},runningMode,numFaces:1,minFaceDetectionConfidence:.6,minFacePresenceConfidence:.6,minTrackingConfidence:.6,outputFaceBlendshapes:role==='live',outputFacialTransformationMatrixes:false});
         backend='tasks-'+delegate.toLowerCase();break;
       }catch{task?.close();task=null;}
     }
@@ -36,10 +37,13 @@ async function handle(data){
   try{
     if(task){
       const timestamp=Math.max(lastTimestamp+.001,Number.isFinite(data.timestamp)?data.timestamp:performance.now());lastTimestamp=timestamp;
-      // VIDEO reutiliza una ROI del fotograma anterior. Aquí cambia el marco
-      // del recorte, así que IMAGE evita reutilizar una ROI en otro sistema.
-      const result=task.detect(data.image);
-      return {signals:result.faceBlendshapes?.[0]?.categories?Object.fromEntries(result.faceBlendshapes[0].categories.map(c=>[c.categoryName,c.score])):null,landmarks:result.faceLandmarks?.[0]||null,faces:result.faceLandmarks?.length||0,backend,ms:performance.now()-started};
+      const mode=role==='live'&&!data.still?'VIDEO':'IMAGE';
+      // setOptions reconstruye el grafo. Invalidar la ROI temporal solo al
+      // cambiar realmente de marco; nunca reutilizarla en otro recorte.
+      if(mode!==runningMode){await task.setOptions({runningMode:mode});runningMode=mode;}
+      else if(data.reset&&mode==='VIDEO'){await task.setOptions({runningMode:'IMAGE'});await task.setOptions({runningMode:'VIDEO'});}
+      const result=mode==='VIDEO'?task.detectForVideo(data.image,timestamp):task.detect(data.image);
+      return {signals:result.faceBlendshapes?.[0]?.categories?Object.fromEntries(result.faceBlendshapes[0].categories.map(c=>[c.categoryName,c.score])):null,landmarks:result.faceLandmarks?.[0]||null,faces:result.faceLandmarks?.length||0,backend,mode,ms:performance.now()-started};
     }
     const nextRefine=data.refine!==false;if(nextRefine!==refine){refine=nextRefine;mesh.setOptions({refineLandmarks:refine});await mesh.reset();}
     if(data.reset)await mesh.reset();landmarks=null;await mesh.send({image:data.image});return {landmarks,backend,ms:performance.now()-started};
